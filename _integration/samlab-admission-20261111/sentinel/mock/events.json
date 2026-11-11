@@ -1,0 +1,26 @@
+{
+  "page_title": "事件列表",
+  "source": "桩数据 / 合成样例",
+  "implementation_status": "未实现",
+  "schema_version": "1.0",
+  "error": null,
+  "filters": [
+    {"key": "channel", "label": "渠道类型", "default": "全部渠道", "options": ["代码托管", "Wiki", "知识共享", "容器镜像", "通用网页"]},
+    {"key": "credential_type", "label": "凭据类型", "default": "全部类型", "options": ["AK/SK", "API Key", "API Token", "SSH 私钥", "数据库连接串", "OAuth Client Secret"]},
+    {"key": "risk_level", "label": "风险档", "default": "全部风险", "options": ["critical", "high", "medium", "low"]},
+    {"key": "disposition", "label": "处置状态", "default": "全部状态", "options": ["待确认", "已复查", "重复事件", "误报待复核", "已关闭"]},
+    {"key": "source_kind", "label": "数据来源", "default": "全部来源", "options": ["真实检测结果", "受控投放检出", "离线授权导入", "合成样例"]}
+  ],
+  "summary": {"candidate_count": null, "classified_count": null, "public_exposure_confirmed_count": null, "unique_credential_count": null, "event_count": 8},
+  "pagination": {"page": 1, "page_size": 20, "total_items": 8, "total_pages": 1, "sort_by": "event_id", "sort_order": "asc"},
+  "items": [
+    {"event_id": "EVT-20261010-0001", "source_kind": "合成样例", "channel": "代码托管", "platform": "GitHub", "credential_type": "AK/SK", "redacted_value": "AKDEMO****7K2P", "evidence_level": "L2", "risk_level": "critical", "disposition": "待确认", "first_observed_at": "2026-10-10 07:30", "credential_fingerprint": null},
+    {"event_id": "EVT-20261010-0002", "source_kind": "合成样例", "channel": "代码托管", "platform": "Gitee", "credential_type": "API Key", "redacted_value": "api_demo_****91QX", "evidence_level": "L1", "risk_level": "high", "disposition": "已复查", "first_observed_at": "2026-10-10 07:42", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0003", "source_kind": "合成样例", "channel": "Wiki", "platform": "MediaWiki", "credential_type": "SSH 私钥", "redacted_value": "-----BEGIN **** KEY-----", "evidence_level": "L2", "risk_level": "high", "disposition": "已复查", "first_observed_at": "2026-10-10 07:55", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0004", "source_kind": "合成样例", "channel": "知识共享", "platform": "公开测试站", "credential_type": "数据库连接串", "redacted_value": "postgres://demo:****@host", "evidence_level": "L1", "risk_level": "critical", "disposition": "待确认", "first_observed_at": "2026-10-10 08:05", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0005", "source_kind": "合成样例", "channel": "通用网页", "platform": "本地回放", "credential_type": "OAuth Client Secret", "redacted_value": "oauth_demo_****5E3A", "evidence_level": "L0", "risk_level": "low", "disposition": "误报待复核", "first_observed_at": "2026-10-10 08:41", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0006", "source_kind": "合成样例", "channel": "Wiki", "platform": "MediaWiki", "credential_type": "API Token", "redacted_value": "tok_demo_****A8LM", "evidence_level": "L2", "risk_level": "medium", "disposition": "重复事件", "first_observed_at": "2026-10-10 08:55", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0007", "source_kind": "合成样例", "channel": "容器镜像", "platform": "测试 Registry", "credential_type": "数据库密码", "redacted_value": "db_pass_****V4RT", "evidence_level": "L2", "risk_level": "critical", "disposition": "已复查", "first_observed_at": "2026-10-10 09:12", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null},
+    {"event_id": "EVT-20261010-0008", "source_kind": "合成样例", "channel": "代码托管", "platform": "GitHub", "credential_type": "API Key", "redacted_value": "key_demo_****2FQ9", "evidence_level": "L1", "risk_level": "high", "disposition": "待确认", "first_observed_at": "2026-10-10 09:28", "source_locator": null, "detected_at": null, "detection_method": null, "credential_fingerprint": null, "fingerprint_key_version": null}
+  ]
+}

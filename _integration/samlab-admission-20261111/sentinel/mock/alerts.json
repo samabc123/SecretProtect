@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "page_title": "告警队列",
+  "source": "桩数据 / 告警样例",
+  "implementation_status": "未实现",
+  "error": null,
+  "items": [
+    {
+      "alert_id": "ALERT-MOCK-0001",
+      "event_id": "EVT-20261010-0001",
+      "severity": "critical",
+      "status": "queued",
+      "channel": "offline-sink",
+      "created_at": "2026-10-10T08:00:00+00:00",
+      "delivered_at": null,
+      "delivery_note": "桩数据：未发送外部通知"
+    }
+  ]
+}

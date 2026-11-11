@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro"><div><h2>监控任务</h2><p>统一查看公开渠道、监控对象、采集方式和运行状态。</p></div><button class="button-primary" data-toggle-task-form>新建监控任务</button></div>
+<div class="section-title"><h3>筛选条件</h3><div class="section-meta"><span class="badge badge-source">数据来源：{{ data.source }}</span><span class="badge badge-status">实现状态：{{ data.implementation_status }}</span></div></div>
+{% if data.error %}<div class="notice" role="alert">{{ data.error }}</div>{% endif %}
+<form class="panel" id="task-form" data-task-form hidden>
+  <div class="section-title"><h3>新增监控任务</h3><span class="badge badge-status">SQLite配置写入；不会自动启动采集</span></div>
+  <div class="filters">
+    {% for name, label in [("task_id", "任务 ID"), ("task_name", "任务名称"), ("channel", "渠道"), ("platform", "平台"), ("monitor_object", "监控对象"), ("collection_method", "采集方式"), ("schedule", "周期")] %}
+    <div class="field"><label for="new-{{ name }}">{{ label }}</label><input id="new-{{ name }}" name="{{ name }}" required></div>
+    {% endfor %}
+    <button type="submit" class="button-primary">保存配置</button>
+    <button type="button" data-toggle-task-form>取消</button>
+  </div>
+</form>
+<form class="panel" method="get" action="/monitoring-tasks"><div class="filters">{% for item in data.filters %}<div class="field"><label for="task-filter-{{ item.key }}">{{ item.label }}</label><select id="task-filter-{{ item.key }}" name="{{ item.key }}"><option value="">{{ item.default }}</option>{% for option in item.options %}<option value="{{ option }}" {% if request.query_params.get(item.key) == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>{% endfor %}<button type="submit">应用筛选</button><a class="button-link" href="/monitoring-tasks">重置筛选</a></div></form>
+<div class="section-title"><h3>运行摘要</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="grid grid-4">{% for item in data.summary %}<div class="panel metric"><div class="label">{{ item.label }}</div><div class="value">{{ item.value }}</div><div class="hint">{{ item.hint }}</div></div>{% endfor %}</div>
+<div class="section-title"><h3>任务列表</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+{% if not data["items"] and not data.error %}<p class="muted">当前没有已存储的监控任务配置；请通过离线导入或后续配置接口添加。</p>{% endif %}
+<div class="table-wrap"><table><thead><tr><th>任务</th><th>渠道/平台</th><th>监控对象</th><th>采集方式</th><th>周期</th><th>最近运行（北京时间）</th><th>状态</th><th>操作</th></tr></thead><tbody>{% for item in data["items"] %}<tr><td><strong>{{ item.task_name }}</strong><div class="muted small">{{ item.task_id }}</div></td><td>{{ item.channel }} / {{ item.platform }}</td><td>{{ item.monitor_object }}</td><td>{{ item.collection_method }}</td><td>{{ item.schedule }}</td><td>{{ item.last_run|format_timestamp }}</td><td><span class="badge badge-{{ item.status_color }}">{{ item.status }}</span></td><td><button data-task-id="{{ item.task_id }}" data-task-action="run">运行</button> <button data-task-id="{{ item.task_id }}" data-task-action="{{ 'resume' if item.status == '已暂停' else 'pause' }}">{{ "恢复" if item.status == "已暂停" else "暂停" }}</button> <button data-task-id="{{ item.task_id }}" data-task-action="delete" class="button-danger">删除</button></td></tr>{% endfor %}</tbody></table></div>
+<div class="section-title"><h3>连接器运行审计</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>运行 ID</th><th>连接器</th><th>目标</th><th>开始（北京时间）</th><th>结束（北京时间）</th><th>状态</th><th>候选</th><th>写入</th><th>错误码</th></tr></thead><tbody>{% for run in data.runs %}<tr><td><code>{{ run.run_id }}</code></td><td>{{ run.connector_name }}</td><td>{{ run.target }}</td><td>{{ run.started_at|format_timestamp }}</td><td>{{ run.finished_at|format_timestamp("进行中") }}</td><td><span class="badge badge-{{ "low" if run.status == "succeeded" else "high" if run.status == "failed" else "medium" }}">{{ run.status }}</span></td><td>{{ run.candidates }}</td><td>{{ run.inserted }}</td><td>{{ run.error_code or "-" }}</td></tr>{% endfor %}{% if not data.runs %}<tr><td colspan="9" class="muted">暂无连接器运行记录；dry-run 或真实运行才会产生审计记录。</td></tr>{% endif %}</tbody></table></div>
+{% endblock %}

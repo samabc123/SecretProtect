@@ -1,0 +1,82 @@
+# 私钥 / 数据库 / 配置文件上下文凭据规则
+- id: private-key-block
+  title: 私钥块（RSA/EC/DSA/OpenSSH/PGP）
+  type: private_key_block
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 95
+  patterns:
+    - '-----BEGIN ((?:RSA|EC|DSA|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY( BLOCK)?-----'
+  capture_block: true
+  min_length: 60
+  tests:
+    positives:
+      - !synthetic "-----BEGIN OPENSSH PRIVATE KEY-----\n{test:alnum:46:6ae2eb8140f7}\n-----END RSA PRIVATE KEY-----\n"
+      - !synthetic "-----BEGIN OPENSSH PRIVATE KEY-----\n{test:alnum:52:34e194e11503}\n-----END OPENSSH PRIVATE KEY-----\n"
+    negatives:
+      - |
+        -----BEGIN CERTIFICATE-----
+        MIIB
+        -----END CERTIFICATE-----
+
+- id: db-connection-url
+  title: 数据库连接串（含口令）
+  type: db_connection_url
+  vendor: database
+  version: 1
+  license: MIT
+  confidence: 70
+  patterns:
+    - '((?:mysql|postgresql|postgres|mongodb(?:\+srv)?|rediss?|mssql)://[A-Za-z0-9._%+-]{1,64}:([^\s''"@:]{4,120})@[^\s''"]{3,200})'
+  min_length: 12
+  forbidden_secret_values:
+    - '^(password|pass|passwd|1234|123456|12345678|admin|root|user|username|example|changeme|none|null)$'
+  tests:
+    positives:
+      - 'DATABASE_URL=mysql://appuser:S3cretPassX9@db.internal:3306/appdb'
+      - 'mongodb+srv://svcuser:An0therPass77@cluster0.abc12.mongodb.net/db'
+    negatives:
+      - 'mysql://appuser:password@db.internal:3306/appdb'
+      - 'postgres://user@localhost:5432/db'
+
+- id: generic-env-assignment
+  title: 配置文件通用密钥赋值
+  type: config_assignment_secret
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 55
+  patterns:
+    - '(?im)^[ \t]*[A-Za-z][A-Za-z0-9_]{1,64}(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS)[ \t]*[:=][ \t]*["'']?(?P<secret>[A-Za-z0-9+/=_.-]{16,})["'']?[ \t]*$'
+    - '(?im)^[ \t]*(?:api[_-]?key|access[_-]?token|secret[_-]?key|auth[_-]?token)["'']?[ \t]*[:=][ \t]*["'']?(?P<secret>[A-Za-z0-9+/=_.-]{16,})["'']?[ \t]*$'
+  min_length: 16
+  min_entropy: 3.2
+  forbidden_secret_values:
+    - '(?i)^(?:stackoverflow_config_secret|config_assignment_secret)$'
+  tests:
+    positives:
+      - 'API_KEY=[REDACTED]'
+      - !synthetic "api_key: {test:alnum:31:d56fabb4d3ab}"
+    negatives:
+      - 'API_KEY=your_api_key_here'
+      - 'SECRET_KEY=aaaaaaaaaaaaaaaaaaaaaaaa'
+      - 'API_KEY=short'
+
+- id: password-with-context
+  title: 配置文件口令（弱特征，需上下文）
+  type: password_with_context
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 35
+  patterns:
+    - '(?im)^[ \t]*(?:password|passwd|db_password|db_pass|mysql_password|postgres_password)["'']?[ \t]*[:=][ \t]*["'']?(?P<secret>[^\s"'']{8,64})["'']?[ \t]*$'
+  min_length: 8
+  min_entropy: 2.2
+  tests:
+    positives:
+      - 'db_password = X9m!pQ2w#zR5tV8x'
+    negatives:
+      - 'password = changeme'
+      - 'password = 1234'

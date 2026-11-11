@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+{% if data.error %}<div class="notice" role="alert">{{ data.error }}</div>{% endif %}
+{% if data.source == "桩数据 / 合成样例" %}<div class="notice">当前详情为桩数据；以下证据与时间线不是检测结果。详情真实查询尚未启用。</div>{% elif data.source.startswith("真实数据源：SQLite") %}<div class="notice">当前详情来自 SQLite 事件记录；请以事件自身的数据来源区分合成样例与受控投放检出，不代表公开渠道真实检测。</div>{% endif %}
+<div class="page-intro"><div><h2>事件详情 {{ data.event.event_id }}</h2><p>展示脱敏证据、时间线、来源和复查状态；当前不执行真实处置。</p></div><div class="button-row"><button data-event-id="{{ data.event.event_id }}" data-feedback="recheck">重新检查</button><button data-event-id="{{ data.event.event_id }}" data-export-evidence>导出证据</button></div></div>
+<div class="section-title"><h3>事件摘要</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="grid grid-4">{% for item in data.event.summary %}<div class="panel metric"><div class="label">{{ item.label }}</div><div class="value small">{{ item.value }}</div><div class="hint">{{ item.hint }}</div></div>{% endfor %}</div>
+<div class="two-col"><section><div class="section-title"><h3>证据与来源</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel"><div class="kpi-list">{% for item in data.evidence %}<div class="kpi-line"><span>{{ item.label }}</span><strong>{% if item.label in ["公开时间", "采集时间"] %}{{ item.value|format_timestamp("未知") }}{% else %}{{ item.value }}{% endif %}</strong></div>{% endfor %}</div><p class="source-note">完整秘密不在界面展示；当前只展示脱敏预览、HMAC 指纹和已记录证据。有效性验证必须通过独立授权流程。</p></div></section>
+<section><div class="section-title"><h3>状态与复查</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel"><div class="kpi-list">{% for item in data.rechecks %}<div class="kpi-line"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>{% endfor %}</div></div></section></div>
+<div class="section-title"><h3>事件时间线</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="panel timeline">{% for item in data.timeline %}<div class="timeline-item"><div class="muted small">{{ item.time|format_timestamp }}</div><div class="timeline-dot"></div><div><strong>{{ item.title }}</strong><div class="muted">{{ item.detail }}</div></div></div>{% endfor %}{% if not data.timeline %}<p class="muted">暂无可展示时间线。</p>{% endif %}</div>
+<div class="section-title"><h3>告警与反馈</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="panel">
+  {% if not data.alerts %}<button data-event-id="{{ data.event.event_id }}" data-create-alert>生成离线告警记录</button>{% endif %}
+  {% for alert in data.alerts %}
+  <div class="kpi-line"><span>{{ alert.alert_id }} / {{ alert.status }}</span><button data-alert-id="{{ alert.alert_id }}" data-deliver-alert>记录离线通知</button></div>
+  <div class="source-note">{{ alert.delivery_note }}</div>
+  {% endfor %}
+  {% for item in data.actions %}
+    {% if item.action %}<button data-event-id="{{ data.event.event_id }}" data-feedback="{{ item.action }}">{{ item.label }}：{{ item.status }}</button>
+    {% else %}<button data-unimplemented="{{ item.label }}">{{ item.label }}：{{ item.status }}</button>{% endif %}
+  {% endfor %}
+  {% if data.feedbacks %}<div class="source-note">最近反馈：{{ data.feedbacks[0].action }}，{{ data.feedbacks[0].created_at|format_timestamp }}</div>{% endif %}
+</div>
+{% endblock %}

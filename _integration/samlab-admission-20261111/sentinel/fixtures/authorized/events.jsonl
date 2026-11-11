@@ -1,0 +1,2 @@
+{"locator":"repository/demo-config.env:4","credential_type":"API Key","value":"api_demo_authorized_91QX"}
+{"locator":"repository/demo-db.env:7","credential_type":"数据库连接串","value":"postgres://demo:db_pass_authorized_V4RT@demo-host:5432/demo"}

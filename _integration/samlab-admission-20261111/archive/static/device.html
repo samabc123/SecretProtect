@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>授权 Codex 轨迹上传</title>
+  <style>
+    :root{color-scheme:light dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}body{margin:0;background:#0b1020;color:#edf2ff;min-height:100vh;display:grid;place-items:center}.card{width:min(520px,calc(100% - 32px));background:#151c31;border:1px solid #2d3858;border-radius:16px;padding:28px;box-shadow:0 24px 80px #0007}h1{font-size:1.35rem;margin:0 0 10px}p{line-height:1.6;color:#b9c3df}.code{font:700 2rem ui-monospace,monospace;letter-spacing:.12em;text-align:center;padding:18px;border-radius:12px;background:#0a1020;margin:20px 0}button{width:100%;border:0;border-radius:10px;padding:13px 16px;background:#5678f5;color:white;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.status{min-height:24px;margin-top:16px;color:#aeb9d6}.error{color:#ff9b9b}.ok{color:#7ee2aa}a{color:#9db2ff}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>授权 Codex 轨迹上传</h1>
+    <p>确认后，本次短期上传会话只会绑定到你当前登录的 Sub2API 账号。客户端不会获得服务器 SSH、Docker 或数据库权限。</p>
+    <div id="code" class="code">--------</div>
+    <button id="approve" type="button">确认授权</button>
+    <div id="status" class="status"></div>
+  </main>
+  <script>
+    const params=new URLSearchParams(location.search);const raw=(params.get('user_code')||'').toUpperCase();
+    const code=raw.replace(/[^A-Z0-9]/g,'');const shown=code.length===8?code.slice(0,4)+'-'+code.slice(4):raw;
+    const codeEl=document.getElementById('code'),button=document.getElementById('approve'),statusEl=document.getElementById('status');codeEl.textContent=shown||'无效代码';
+    const token=()=>localStorage.getItem('auth_token')||'';
+    async function refreshToken(){const refresh=localStorage.getItem('refresh_token');if(!refresh)return false;try{const response=await fetch('/api/v1/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refresh})});const body=await response.json();const data=body&&body.code===0?body.data:body;if(!response.ok||!data?.access_token)return false;localStorage.setItem('auth_token',data.access_token);if(data.refresh_token)localStorage.setItem('refresh_token',data.refresh_token);return true}catch{return false}}
+    function status(text,kind=''){statusEl.textContent=text;statusEl.className='status '+kind}
+    async function approve(){
+      if(code.length!==8){status('设备码格式无效','error');return}
+      if(!token()){location.href='/login?redirect='+encodeURIComponent(location.pathname+location.search);return}
+      button.disabled=true;status('正在核验账号并授权…');
+      try{
+        let response=await fetch('/_archive/api/v1/trajectory-sync/device/approve',{method:'POST',headers:{'Authorization':'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({user_code:shown})});
+        if(response.status===401&&await refreshToken())response=await fetch('/_archive/api/v1/trajectory-sync/device/approve',{method:'POST',headers:{'Authorization':'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({user_code:shown})});
+        if(response.status===401){location.href='/login?redirect='+encodeURIComponent(location.pathname+location.search);return}
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok||body.code!==0)throw new Error(body.message||('授权失败（HTTP '+response.status+'）'));
+        const id=body.data?.user_id;const email=body.data?.email||'';
+        status('授权成功：user_id='+id+(email?'，'+email:'')+'。可以返回终端。','ok');button.textContent='已授权';
+      }catch(error){status(error.message||String(error),'error');button.disabled=false}
+    }
+    button.addEventListener('click',approve);
+  </script>
+</body>
+</html>

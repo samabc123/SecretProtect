@@ -1,0 +1,21 @@
+# 云厂商 / 云服务 URL 凭据规则（第三批扩展）
+- id: cloud-presigned-url
+  title: 云对象存储预签名 URL（S3/OSS 签名参数）
+  type: cloud_presigned_url
+  vendor: cloud
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(https?://[^\s''"]{10,500}\?(?:[^\s''"]*&)*(?:X-Amz-Signature|Signature)=[0-9a-fA-F]{32,})'
+  min_length: 60
+  max_length: 1000
+  forbidden_secret_values:
+    - '(?i)(?:x-amz-)?signature=(?:EXAMPLE|SIGNATURE|[0-9a-f]{8})$'
+  tests:
+    positives:
+      - !synthetic "curl \"https://bucket.oss-cn-hangzhou.aliyuncs.com/backup.zip?Expires=1789999999&OSSAccessKeyId=LTAI{test:alnum:16:4008a3aca27a}&Signature={test:hex:64:1b6dd5f75b00}\""
+      - !synthetic "https://s3.us-east-1.amazonaws.com/corp/data?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=86400&X-Amz-Signature={test:hex:64:de15d57db6d6}"
+    negatives:
+      - !synthetic "https://bucket.oss-cn-hangzhou.aliyuncs.com/backup.zip?Expires=1789999999&OSSAccessKeyId=LTAI{test:alnum:16:4008a3aca27a}"
+      - 'https://example.com/download?sig=short'

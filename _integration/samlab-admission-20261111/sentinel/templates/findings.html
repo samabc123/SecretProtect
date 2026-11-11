@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro">
+  <div><h2>统一发现项</h2><p>以凭据实体为主视图，展示去重指纹、出现次数、人工复核和授权验证状态。</p></div>
+  <div class="button-row"><button class="button-primary" data-findings-refresh>刷新</button><button data-unified-export>导出脱敏 JSON</button></div>
+</div>
+<div class="section-title"><h3>发现项查询</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端 SQLite</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label for="finding-q">关键词</label><input id="finding-q" data-finding-filter="q" placeholder="类型、脱敏候选或厂商"></div>
+    <div class="field"><label for="finding-type">凭据类型</label><input id="finding-type" data-finding-filter="type" placeholder="例如 API Key"></div>
+    <div class="field"><label for="finding-review">复核状态</label><select id="finding-review" data-finding-filter="review"><option value="">全部</option><option value="pending">待复核</option><option value="confirmed">已确认</option><option value="false_positive">误报</option><option value="ignored">已忽略</option></select></div>
+    <div class="field"><label for="finding-verify">验证状态</label><select id="finding-verify" data-finding-filter="verify"><option value="">全部</option><option value="not_requested">未请求</option><option value="queued">排队中</option><option value="inconclusive">无法判断</option><option value="valid">有效</option><option value="invalid">无效</option></select></div>
+    <button data-findings-apply>应用筛选</button>
+  </div>
+</div>
+<div class="grid grid-4" data-findings-summary>
+  <div class="panel metric"><div class="label">唯一发现项</div><div class="value">-</div><div class="hint">来自统一 credentials 表</div></div>
+  <div class="panel metric"><div class="label">当前页</div><div class="value">-</div><div class="hint">分页结果</div></div>
+  <div class="panel metric"><div class="label">待复核</div><div class="value">-</div><div class="hint">状态来自后端</div></div>
+  <div class="panel metric"><div class="label">待验证</div><div class="value">-</div><div class="hint">不代表凭据有效</div></div>
+</div>
+<div class="section-title"><h3>凭据实体列表</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端 SQLite</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>ID</th><th>类型</th><th>脱敏候选</th><th>HMAC 指纹</th><th>置信度</th><th>出现次数</th><th>复核</th><th>验证</th><th>首次发现</th><th>操作</th></tr></thead><tbody data-findings-rows><tr><td colspan="10" class="muted">正在读取统一后端数据……</td></tr></tbody></table></div>
+<div class="pagination" data-findings-pagination></div>
+<p class="source-note">页面不显示完整秘密；指纹为带密钥 HMAC。真实平台结果、受控投放检出、离线授权导入和桩数据不在此页面混合计数。</p>
+{% endblock %}

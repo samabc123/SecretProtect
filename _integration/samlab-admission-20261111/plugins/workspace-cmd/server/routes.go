@@ -1,0 +1,42 @@
+package main
+
+import "net/http"
+
+func (a *app) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/_workspace/health", a.health)
+	mux.HandleFunc("/_workspace/api/v1/session", a.session)
+	mux.HandleFunc("/_workspace/api/v1/weekly-reports", a.weeklyReports)
+	mux.HandleFunc("/_workspace/api/v1/weekly-reports/", a.weeklyReportByWeek)
+	mux.HandleFunc("/_workspace/api/v1/weekly-reports/generate", a.generateWeekly)
+	mux.HandleFunc("/_workspace/api/v1/weekly-report-jobs/", a.weeklyReportJob)
+	mux.HandleFunc("/_workspace/api/v1/weekly-report-plans/", a.weeklyReportPlanByWeek)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-reports", a.adminWeeklyReports)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-reports/", a.adminWeeklyReportByID)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-report-plans/rebuild", a.adminWeeklyReportPlanRebuild)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-report-templates", a.adminWeeklyReportTemplates)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-report-templates/", a.adminWeeklyReportTemplateByID)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-scoring/calibration", a.adminScoringCalibration)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-scoring/calibration/stats", a.adminScoringCalibrationStats)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-scoring/calibration/export", a.adminScoringCalibrationExport)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-scoring/review-queue", a.adminScoringReviewQueue)
+	mux.HandleFunc("/_workspace/api/v1/admin/weekly-scoring/attributions/", a.adminWeeklyReportAttribution)
+	mux.HandleFunc("/_workspace/api/v1/documents", a.documents)
+	mux.HandleFunc("/_workspace/api/v1/documents/", a.documentByID)
+	mux.HandleFunc("/_workspace/api/v1/admin/documents", a.adminDocuments)
+	mux.HandleFunc("/_workspace/api/v1/admin/documents/", a.adminDocumentByID)
+	mux.HandleFunc("/_workspace/api/v1/prompt-memory/settings", a.promptMemorySettings)
+	mux.HandleFunc("/_workspace/api/v1/prompt-memories", a.promptMemories)
+	mux.HandleFunc("/_workspace/api/v1/prompt-memories/", a.promptMemoryByID)
+	mux.HandleFunc("/_workspace/api/v1/prompt-polish", a.promptPolish)
+	mux.HandleFunc("/_workspace/api/v1/prompt-polish/feedback", a.promptPolishFeedback)
+	mux.HandleFunc("/_workspace/api/v1/prompt-context/sources", a.promptContextSources)
+	mux.HandleFunc("/_workspace/api/v1/prompt-context/sources/", a.promptContextSourceByID)
+	mux.HandleFunc("/_workspace/api/v1/prompt-rag/settings", a.promptRAGSettings)
+	mux.HandleFunc("/_workspace/api/v1/knowledge-documents", a.knowledgeDocuments)
+	mux.HandleFunc("/_workspace/api/v1/knowledge-documents/", a.knowledgeDocumentByID)
+	mux.HandleFunc("/_workspace/api/v1/admin/knowledge-documents", a.adminKnowledgeDocuments)
+	mux.HandleFunc("/_workspace/api/v1/admin/knowledge-documents/", a.adminKnowledgeDocumentByID)
+	mux.HandleFunc("/_workspace/", a.static)
+	return mux
+}

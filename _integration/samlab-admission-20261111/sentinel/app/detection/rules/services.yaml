@@ -1,0 +1,204 @@
+# AI 服务 / 邮件 / 短信 / OAuth 凭据规则
+- id: openai-api-key
+  title: OpenAI API Key
+  type: openai_api_key
+  vendor: openai
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'sk-[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,}'
+    - 'sk-proj-[A-Za-z0-9_-]{40,}'
+    - '(?i)openai[_-]?api[_-]?key["'']?\s*[:=]\s*["''](?P<secret>sk-[A-Za-z0-9_-]{16,})["'']'
+  min_length: 30
+  verifier: openai-api-key
+  tests:
+    positives:
+      - !synthetic "OPENAI_API_KEY=sk-{test:alnum:22:5528353140ac}T3BlbkFJ{test:alnum:22:c08da28fced8}"
+      - !synthetic "openai_api_key = sk-proj-{test:alnum:42:5fc4d3aefc1a}"
+    negatives:
+      - 'OPENAI_API_KEY=sk-your-key-here'
+      - 'key = sk-123'
+
+- id: anthropic-api-key
+  title: Anthropic API Key
+  type: anthropic_api_key
+  vendor: anthropic
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'sk-ant-[A-Za-z0-9_-]{24,}'
+  min_length: 31
+  verifier: anthropic-api-key
+  tests:
+    positives:
+      - !synthetic "ANTHROPIC_API_KEY=sk-ant-api03-{test:alnum:24:ee4e8b0a87cd}"
+    negatives:
+      - 'sk-ant-short'
+
+- id: sendgrid-api-key
+  title: SendGrid API Key
+  type: sendgrid_api_key
+  vendor: sendgrid
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}'
+  min_length: 40
+  tests:
+    positives:
+      - !synthetic "SENDGRID_API_KEY=SG.{test:alnum:20:645a35400a20}.{test:alnum:42:15c46940f8e7}"
+    negatives:
+      - 'SG.short.short'
+
+- id: mailgun-api-key
+  title: Mailgun API Key
+  type: mailgun_api_key
+  vendor: mailgun
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(key-[0-9A-Za-z]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 36
+  max_length: 36
+  required_context:
+    - '(?i)mailgun'
+  tests:
+    positives:
+      - !synthetic "MAILGUN_API_KEY = key-{test:hex:32:479820f437f0}"
+    negatives:
+      - !synthetic "api = key-{test:hex:32:479820f437f0}"
+
+- id: resend-api-key
+  title: Resend API Key
+  type: resend_api_key
+  vendor: resend
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(re_[A-Za-z0-9]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 35
+  max_length: 35
+  tests:
+    positives:
+      - !synthetic "RESEND_API_KEY=re_{test:hex:32:479820f437f0}"
+    negatives:
+      - 're_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+- id: twilio-account-sid
+  title: Twilio Account SID
+  type: twilio_account_sid
+  vendor: twilio
+  version: 1
+  license: MIT
+  confidence: 55
+  patterns:
+    - '(?<![A-Za-z0-9])(AC[a-f0-9]{32})(?![a-f0-9])'
+  secret_group: 1
+  min_length: 34
+  max_length: 34
+  pairing: { with: twilio-auth-token, max_line_distance: 5, boost: 20 }
+  tests:
+    positives:
+      - !synthetic "TWILIO_ACCOUNT_SID = AC{test:hex:32:8e67f9579b8f}"
+    negatives:
+      - 'id = AC123'
+
+- id: twilio-auth-token
+  title: Twilio Auth Token
+  type: twilio_auth_token
+  vendor: twilio
+  version: 1
+  license: MIT
+  confidence: 60
+  patterns:
+    - '(?<![A-Za-z0-9])([a-f0-9]{32})(?![a-f0-9])'
+  secret_group: 1
+  min_length: 32
+  max_length: 32
+  min_entropy: 2.8
+  required_context:
+    - '(?i)(auth[_-]?token|twilio)'
+  pairing: { with: twilio-account-sid, max_line_distance: 5, boost: 20 }
+  verifier: twilio-pair
+  tests:
+    positives:
+      - !synthetic "TwilioAuthToken = {test:hex:32:be2c0892f4d9}"
+    negatives:
+      - !synthetic "md5 = {test:hex:32:be2c0892f4d9}"
+
+- id: oauth-client-secret
+  title: OAuth 客户端密钥（通用）
+  type: oauth_client_secret
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 65
+  patterns:
+    - '(?i)client_secret["'']?[ \t]*[:=][ \t]*["'']?(?P<secret>[A-Za-z0-9_-]{20,})["'']?'
+  min_length: 20
+  tests:
+    positives:
+      - !synthetic "client_secret = {test:alnum:28:18beadbc8d05}"
+    negatives:
+      - 'client_secret = changeme'
+
+- id: google-oauth-client-secret
+  title: Google OAuth 客户端密钥
+  type: google_oauth_client_secret
+  vendor: google
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'GOCSPX-[A-Za-z0-9_-]{28,}'
+  min_length: 35
+  tests:
+    positives:
+      - !synthetic "GOOGLE_CLIENT_SECRET=GOCSPX-{test:alnum:28:547009bb3435}"
+    negatives:
+      - 'GOCSPX-short'
+
+
+# 第三批扩展：SaaS 令牌
+- id: sentry-dsn
+  title: Sentry DSN（客户端密钥）
+  type: sentry_dsn
+  vendor: sentry
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(https://[0-9a-f]{32}@(?:sentry\.io|o[0-9]+\.ingest\.sentry\.io)/([0-9]+))'
+  secret_group: 1
+  min_length: 50
+  tests:
+    positives:
+      - !synthetic "SENTRY_DSN=https://{test:hex:32:f1bcb49aab34}@sentry.io/1234567"
+      - !synthetic "dsn: https://{test:hex:32:f1bcb49aab34}@o123456.ingest.sentry.io/7654321"
+    negatives:
+      - !synthetic "https://{test:hex:32:f1bcb49aab34}@example.com/1234567"
+
+- id: notion-api-key
+  title: Notion 集成密钥（secret_）
+  type: notion_api_key
+  vendor: notion
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - '(?<![A-Za-z0-9])(secret_[A-Za-z0-9]{43})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 50
+  max_length: 50
+  tests:
+    positives:
+      - !synthetic "NOTION_KEY=secret_{test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'NOTION_KEY=secret_short'

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ "登录" if mode == "login" else "注册" }} · SecretRadar</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}">
+</head>
+<body class="auth-body">
+  <main class="auth-layout">
+    <a class="auth-brand" href="/login"><img src="{{ url_for('static', path='favicon.svg') }}" alt="" width="42" height="42"><span>SecretRadar<small>云上凭据泄露自动化检测</small></span></a>
+    <section class="auth-card">
+      <div class="auth-tabs" aria-label="账号入口">
+        <a href="/login" class="{{ 'active' if mode == 'login' else '' }}" {% if mode == "login" %}aria-current="page"{% endif %}>登录</a>
+        <a href="/register" class="{{ 'active' if mode == 'register' else '' }}" {% if mode == "register" %}aria-current="page"{% endif %}>注册</a>
+      </div>
+      <h1>{{ "登录工作台" if mode == "login" else "创建账号" }}</h1>
+      <p class="muted">{{ "进入凭据检测与响应工作台" if mode == "login" else "当前所有账号使用相同操作权限" }}</p>
+      <form method="post" action="/api/auth/{{ mode }}" data-auth-form data-mode="{{ mode }}" data-next="{{ next_path }}">
+        <div class="field"><label for="username">用户名</label><input id="username" name="username" autocomplete="username" maxlength="32" {% if mode == "register" %}minlength="3" pattern="[A-Za-z0-9_][A-Za-z0-9_.\-]{2,31}"{% endif %} required autofocus></div>
+        <div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="{{ 'current-password' if mode == 'login' else 'new-password' }}" {% if mode == "register" %}minlength="6"{% endif %} maxlength="128" required></div>
+        {% if mode == "register" %}<div class="field"><label for="confirm-password">确认密码</label><input id="confirm-password" name="confirm_password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required></div>{% endif %}
+        <p class="auth-error" data-auth-message role="alert" hidden></p>
+        <button class="button-primary auth-submit" type="submit">{{ "登录" if mode == "login" else "注册并登录" }}</button>
+      </form>
+      <div class="auth-foot"><span class="status-dot"></span>本机访问 · 统一权限</div>
+    </section>
+    <p class="auth-copyright">第五届中国研究生网络安全创新大赛 · 揭榜挑战赛</p>
+  </main>
+  <script src="{{ url_for('static', path='js/auth.js') }}"></script>
+</body>
+</html>

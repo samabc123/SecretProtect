@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro"><div><h2>事件列表</h2><p>按渠道、凭据类型、风险和处置状态筛选泄露事件。</p></div><div class="button-row"><button data-batch-feedback="confirm_public">批量确认</button><button data-export-events>导出事件</button></div></div>
+<div class="section-title"><h3>筛选与口径</h3><div class="section-meta"><span class="badge badge-source">数据来源：{{ data.source }}</span><span class="badge badge-status">实现状态：{{ data.implementation_status }}</span></div></div>
+{% if data.error %}<div class="notice" role="alert">{{ data.error }}</div>{% endif %}
+<form class="panel" method="get" action="/events">
+  <div class="filters">
+    {% for item in data.filters %}
+    <div class="field">
+      <label for="filter-{{ item.key }}">{{ item.label }}</label>
+      <select id="filter-{{ item.key }}" name="{{ item.key }}">
+        <option value="">{{ item.default }}</option>
+        {% for option in item.options %}<option value="{{ option }}" {% if request.query_params.get(item.key) == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <div class="field"><label for="sort_by">排序字段</label><select id="sort_by" name="sort_by">
+      {% for option in ["event_id", "first_observed_at", "risk_level", "credential_type"] %}<option value="{{ option }}" {% if data.pagination.sort_by == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+    </select></div>
+    <div class="field"><label for="sort_order">顺序</label><select id="sort_order" name="sort_order">
+      <option value="asc" {% if data.pagination.sort_order == "asc" %}selected{% endif %}>升序</option>
+      <option value="desc" {% if data.pagination.sort_order == "desc" %}selected{% endif %}>降序</option>
+    </select></div>
+    <div class="field"><label for="page_size">每页</label><select id="page_size" name="page_size">
+      {% for option in [10, 20, 50, 100] %}<option value="{{ option }}" {% if data.pagination.page_size == option %}selected{% endif %}>{{ option }} 条</option>{% endfor %}
+    </select></div>
+    <button type="submit">应用筛选</button>
+    <a class="button-link" href="/events">重置</a>
+  </div>
+  <p class="source-note">筛选、排序和分页由当前数据源执行；数量按筛选结果重算。</p>
+</form>
+<div class="grid grid-4"><div class="panel metric"><div class="label">候选数</div><div class="value small">{{ data.summary.candidate_count if data.summary.candidate_count is not none else "未知" }}</div><div class="hint">当前事件记录口径</div></div><div class="panel metric"><div class="label">已分类数</div><div class="value small">{{ data.summary.classified_count if data.summary.classified_count is not none else "未知" }}</div><div class="hint">L1-L4 证据</div></div><div class="panel metric"><div class="label">唯一凭据数</div><div class="value small">{{ data.summary.unique_credential_count if data.summary.unique_credential_count is not none else "未知" }}</div><div class="hint">HMAC 指纹去重</div></div><div class="panel metric"><div class="label">事件数</div><div class="value small">{{ data.summary.event_count }}</div><div class="hint">当前持久化记录</div></div></div>
+<div class="section-title"><h3>事件清单</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="全选当前页"></th><th>事件</th><th>来源</th><th>凭据类型</th><th>脱敏候选</th><th>证据</th><th>风险</th><th>处置</th><th>首次观测（北京时间）</th></tr></thead><tbody>{% for item in data["items"] %}<tr><td><input type="checkbox" data-event-select value="{{ item.event_id }}" aria-label="选择 {{ item.event_id }}"></td><td><a href="/events/{{ item.event_id }}"><strong>{{ item.event_id }}</strong></a><div class="muted small">{{ item.source_kind }}</div></td><td>{{ item.channel }}<div class="muted small">{{ item.platform }}</div></td><td>{{ item.credential_type }}</td><td><code>{{ item.redacted_value }}</code></td><td>{{ item.evidence_level }}</td><td><span class="badge badge-{{ item.risk_level }}">{{ item.risk_level }}</span></td><td>{{ item.disposition }}</td><td>{{ item.first_observed_at|format_timestamp }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="pagination">
+  <span>第 {{ data.pagination.page }} / {{ data.pagination.total_pages or 1 }} 页，共 {{ data.pagination.total_items }} 条</span>
+  {% if data.pagination.page > 1 %}<a class="button-link" href="{{ request.url.include_query_params(page=data.pagination.page - 1) }}">上一页</a>{% endif %}
+  {% if data.pagination.total_pages and data.pagination.page < data.pagination.total_pages %}<a class="button-link" href="{{ request.url.include_query_params(page=data.pagination.page + 1) }}">下一页</a>{% endif %}
+</div>
+{% if not data["items"] and not data.error %}<p class="muted">当前数据源没有事件记录；请显式导入合成样例，不会自动生成检测结果。</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro"><div><h2>指标报告</h2><p>映射赛题五项评价，保留统计口径、来源和不确定性。</p></div><button data-export-report>生成报告</button></div>
+<div class="section-title"><h3>五项评价映射</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>评价项</th><th>对应模块</th><th>当前值</th><th>目标/口径</th><th>证据状态</th></tr></thead><tbody>{% for item in data.evaluation_mapping %}<tr><td>{{ item.evaluation }}</td><td>{{ item.module }}</td><td><strong>{{ item.current }}</strong></td><td>{{ item.definition }}</td><td><span class="badge badge-status">{{ item.status }}</span></td></tr>{% endfor %}</tbody></table></div>
+<div class="section-title"><h3>数量统计</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="grid grid-4">{% for item in data.counts %}<div class="panel metric"><div class="label">{{ item.label }}</div><div class="value">{{ item.value }}</div><div class="hint">{{ item.note }}</div></div>{% endfor %}</div>
+<div class="two-col"><section><div class="section-title"><h3>发现时效</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel chart">{% for item in data.timeliness %}<div class="bar" style="height: {{ item.height }}%"><span>{{ item.label }} {{ item.value }}</span></div>{% endfor %}</div></section><section><div class="section-title"><h3>扩展性实验</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel kpi-list">{% for item in data.extensibility %}<div class="kpi-line"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>{% endfor %}</div></section></div>
+<div class="section-title"><h3>统计边界</h3><div class="section-meta"><span class="badge badge-source">方案设计</span><span class="badge badge-status">待确认</span></div></div><div class="panel">{% for item in data.boundaries %}<p><strong>{{ item.label }}：</strong>{{ item.value }}</p>{% endfor %}</div>
+<div class="section-title"><h3>统一后端真实重算</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端 SQLite</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="grid grid-4" data-evaluation-unified>
+  <div class="panel metric"><div class="label">真实候选</div><div class="value">-</div><div class="hint">仅 source_kind=真实检测结果</div></div>
+  <div class="panel metric"><div class="label">渠道类型</div><div class="value">-</div><div class="hint">可重算明细</div></div>
+  <div class="panel metric"><div class="label">凭据类型</div><div class="value">-</div><div class="hint">主类型去重</div></div>
+  <div class="panel metric"><div class="label">公开至检测 P95</div><div class="value">未知</div><div class="hint">无公开时间不估算</div></div>
+</div>
+<div class="panel" data-evaluation-breakdown>正在读取统一后端统计……</div>
+{% if data.source_kind_timeliness %}
+<div class="section-title"><h3>按数据来源分层的时效</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>来源类型</th><th>出现位置</th><th>公开至检测 P50</th><th>采集至检测 P50</th><th>检测至告警 P50</th><th>公开时间未知</th></tr></thead><tbody>{% for item in data.source_kind_timeliness %}<tr><td>{{ item.source_kind }}</td><td>{{ item.occurrence_count }}</td><td>{{ item.published_to_detected }}</td><td>{{ item.fetched_to_detected }}</td><td>{{ item.detected_to_alert }}</td><td>{{ item.unknown_publication }}</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+{% if data.time_model %}
+<div class="section-title"><h3>时间字段与未知项</h3><div class="section-meta"><span class="badge badge-source">规范化时间模型</span><span class="badge badge-status">未知不估算</span></div></div>
+<div class="two-col">
+  <div class="panel"><p><strong>存储/统计时区：</strong>{{ data.time_model.timezone }}</p><p class="muted small">页面展示统一转换为北京时间（Asia/Shanghai）；未知时间保持未知，不用页面访问时间补齐。</p><p class="muted small">{{ data.time_model.note }}</p>{% for key, value in data.time_model.unknown_counts.items() %}<div class="kpi-line"><span>{{ key }}</span><strong>{{ value }} 条未知</strong></div>{% endfor %}</div>
+  <div class="panel kpi-list">{% for key, value in data.time_model.field_sources.items() %}<div class="kpi-line"><span>{{ key }}</span><strong class="muted small">{{ value }}</strong></div>{% endfor %}</div>
+</div>
+{% endif %}
+{% endblock %}

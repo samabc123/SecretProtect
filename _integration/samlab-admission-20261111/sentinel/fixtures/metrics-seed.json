@@ -1,0 +1,50 @@
+{
+  "metrics": [
+    {
+      "metric_key": "candidate_count",
+      "value": 3,
+      "ts": "2026-10-12T00:00:00Z",
+      "dimension": {
+        "channel": "code_hosting",
+        "platform": "GitHub（授权 API）"
+      }
+    },
+    {
+      "metric_key": "unique_finding_count",
+      "value": 2,
+      "ts": "2026-10-12T00:00:00Z",
+      "dimension": {
+        "channel": "code_hosting",
+        "platform": "GitHub（授权 API）"
+      }
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "seed-finding-001",
+      "fingerprint": "seed-fingerprint-001",
+      "status": "pending",
+      "review_status": "pending",
+      "verification_status": "not_requested",
+      "occurrence_count": 2
+    },
+    {
+      "finding_id": "seed-finding-002",
+      "fingerprint": "seed-fingerprint-002",
+      "status": "confirmed",
+      "review_status": "confirmed",
+      "verification_status": "valid",
+      "occurrence_count": 1
+    }
+  ],
+  "audit": [
+    {
+      "task_id": "seed-task-001",
+      "status": "succeeded",
+      "candidates": 3,
+      "inserted": 2,
+      "filtered": 1,
+      "ts": "2026-10-12T00:00:00Z"
+    }
+  ]
+}

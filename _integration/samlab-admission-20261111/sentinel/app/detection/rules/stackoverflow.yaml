@@ -1,0 +1,65 @@
+# Stack Overflow code snippets often wrap secrets in JSON, YAML, shell, or
+# language assignments. These rules require an explicit secret-bearing key so
+# ordinary prose and unrelated identifiers are not promoted to candidates.
+- id: stackoverflow-config-assignment
+  title: Stack Overflow 配置赋值凭据
+  type: stackoverflow_config_secret
+  vendor: stackoverflow
+  version: 1
+  license: MIT
+  confidence: 50
+  patterns:
+    - '(?im)^[ \t]*(?:export[ \t]+)?(?:["'']?)(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY|API_KEY|API_TOKEN|ACCESS_TOKEN|AUTH_TOKEN|SECRET_KEY|PRIVATE_KEY|GITHUB_TOKEN|NPM_TOKEN|HF_TOKEN|HUGGINGFACE_TOKEN|DB_PASSWORD)(?:["'']?)[ \t]*[:=][ \t]*["''](?P<secret>[^"''`\r\n]{8,256})["''](?:[ \t]*(?:#|//).*)?$'
+    - '(?im)^[ \t]*(?:export[ \t]+)?(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY|API_KEY|API_TOKEN|ACCESS_TOKEN|AUTH_TOKEN|SECRET_KEY|PRIVATE_KEY|GITHUB_TOKEN|NPM_TOKEN|HF_TOKEN|HUGGINGFACE_TOKEN|DB_PASSWORD)[ \t]*[:=][ \t]*(?P<secret>[A-Za-z0-9_./:+=@%~-]{8,256})(?:[ \t]*(?:#|//).*)?$'
+  min_length: 8
+  min_entropy: 2.2
+  forbidden_secret_values:
+    - '(?i)^(?:password|passwd|secret|token|key|example|sample|dummy|placeholder|changeme|replace[_-]?me|your[_-].*|<[^>]+>|stackoverflow_config_secret|config_assignment_secret|(?:my|your)[ _-]*(?:api[ _-]*)?(?:key|token|secret)(?:[ _-]*here)?)$'
+  tests:
+    positives:
+      - !synthetic "export ACCESS_TOKEN='{test:alnum:28:05970cc478d4}'"
+      - !synthetic "export API_TOKEN={test:alnum:28:05970cc478d4}"
+      - 'export DB_PASSWORD=''StrongPass9@LongValue7'''
+    negatives:
+      - 'API_KEY="your_api_key_here"'
+      - 'message = "This is ordinary Stack Overflow prose."'
+
+- id: stackoverflow-json-config-secret
+  title: Stack Overflow JSON 配置凭据
+  type: stackoverflow_config_secret
+  vendor: stackoverflow
+  version: 1
+  license: MIT
+  confidence: 68
+  patterns:
+    - '(?im)"(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|client[_-]?secret|secret[_-]?key|private[_-]?key|password)"[ \t]*:[ \t]*"(?P<secret>[^"\r\n]{8,256})"'
+  min_length: 8
+  min_entropy: 2.2
+  forbidden_secret_values:
+    - '(?i)^(?:password|passwd|secret|token|key|example|sample|dummy|placeholder|changeme|replace[_-]?me|your[_-].*|<[^>]+>|stackoverflow_config_secret|config_assignment_secret|(?:my|your)[ _-]*(?:api[ _-]*)?(?:key|token|secret)(?:[ _-]*here)?)$'
+  tests:
+    positives:
+      - !synthetic "{\"api_key\": \"so-json-{test:alnum:16:21c5d0c98fe2}\"}"
+      - '{"client_secret":"client-secret-4F3e2D1c8B7a"}'
+    negatives:
+      - '{"api_key": "your_api_key_here"}'
+      - '{"description": "ordinary example text"}'
+
+- id: stackoverflow-database-url
+  title: Stack Overflow 数据库连接串
+  type: db_connection_url
+  vendor: database
+  version: 1
+  license: MIT
+  confidence: 72
+  patterns:
+    - '(?i)(?P<secret>pgsql://[A-Za-z0-9._%+-]{1,64}:[^\s''"@:]{4,120}@[^\s''"]{3,200})'
+  min_length: 12
+  forbidden_secret_values:
+    - '(?i)^(?:password|pass|passwd|1234|123456|12345678|admin|root|user|username|example|changeme|none|null)$'
+  tests:
+    positives:
+      - 'DATABASE_URL="pgsql://svc:Pass9wordValue@db.corp.internal:5432/app"'
+    negatives:
+      - 'DATABASE_URL="sqlite:///app.db"'
+

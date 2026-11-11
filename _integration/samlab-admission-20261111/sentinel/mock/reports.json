@@ -1,0 +1,36 @@
+{
+  "page_title": "指标报告",
+  "source": "桩数据 / 方案设计",
+  "implementation_status": "未实现",
+  "evaluation_mapping": [
+    {"evaluation": "①公开渠道类型数量、总数量", "module": "渠道插件与监控任务", "current": "5 类 / 8 对象", "definition": "类型、平台和监控对象分开统计", "status": "目标/待验证"},
+    {"evaluation": "②支持检索凭据类型数量", "module": "凭据类型注册表", "current": "8 类", "definition": "按主类型去重，厂商为属性", "status": "目标/待验证"},
+    {"evaluation": "③平台可扩展性", "module": "统一采集接口", "current": "桩数据", "definition": "记录新增代码、配置、工时、测试", "status": "未实现"},
+    {"evaluation": "④发现凭据数量", "module": "事件、证据和去重", "current": "8 唯一 / 12 候选", "definition": "暂以L2公开来源确认后的唯一指纹为主口径", "status": "待主办方确认"},
+    {"evaluation": "⑤发现时间与公开时间", "module": "时间线和探针", "current": "桩数据", "definition": "公开、观测、采集、检测、告警分开记录", "status": "未实现"}
+  ],
+  "counts": [
+    {"label": "候选数", "value": 12, "note": "不等同于确认泄露"},
+    {"label": "确认类别数", "value": 10, "note": "桩数据"},
+    {"label": "唯一凭据数", "value": 8, "note": "合成指纹"},
+    {"label": "泄露事件数", "value": 8, "note": "按事件展示"}
+  ],
+  "timeliness": [
+    {"label": "P50", "value": "4m", "height": 42},
+    {"label": "P90", "value": "8m", "height": 68},
+    {"label": "P95", "value": "12m", "height": 84},
+    {"label": "Max", "value": "18m", "height": 100}
+  ],
+  "extensibility": [
+    {"label": "新增渠道代码量", "value": "待测量"},
+    {"label": "新增配置项", "value": "待测量"},
+    {"label": "新增渠道工时", "value": "待测量"},
+    {"label": "异常恢复测试", "value": "待实现"}
+  ],
+  "boundaries": [
+    {"label": "真实公开数据", "value": "阶段 0 不采集；后续仅在合法公开或授权环境验证。"},
+    {"label": "时效统计", "value": "公开时间未知样本不进入精确泄露窗口统计。"},
+    {"label": "有效性", "value": "第三方凭据不登录、不调用、不撤销；仅自有/授权环境验证。"},
+    {"label": "计数口径", "value": "官方未明确的渠道、类型和数量口径保留可重算明细。"}
+  ]
+}

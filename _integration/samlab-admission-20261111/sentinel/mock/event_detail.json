@@ -1,0 +1,42 @@
+{
+  "page_title": "事件详情",
+  "schema_version": "1.0",
+  "source": "桩数据 / 合成样例",
+  "implementation_status": "未实现",
+  "error": null,
+  "event": {
+    "event_id": "EVT-20261010-0001",
+    "summary": [
+      {"label": "凭据类型", "value": "AK/SK", "hint": "确认类别：桩数据"},
+      {"label": "渠道", "value": "代码托管 / GitHub", "hint": "公开载体：合成仓库"},
+      {"label": "风险档", "value": "critical", "hint": "影响风险尚未验证"},
+      {"label": "处置状态", "value": "待确认", "hint": "人工步骤未实现"}
+    ]
+  },
+  "evidence": [
+    {"label": "脱敏候选", "value": "AKDEMO****7K2P"},
+    {"label": "证据等级", "value": "L2 来源确认"},
+    {"label": "数据来源", "value": "合成样例（未投放、未检测）"},
+    {"label": "公开位置", "value": "commit:/config/demo.env:4"},
+    {"label": "指纹", "value": "hmac:demo-fingerprint-01"},
+    {"label": "有效性", "value": "未验证"}
+  ],
+  "rechecks": [
+    {"label": "当前来源可见性", "value": "桩数据：可见"},
+    {"label": "历史副本检查", "value": "未实现"},
+    {"label": "凭据撤销/轮换", "value": "未执行，第三方禁止操作"},
+    {"label": "关闭依据", "value": "无"}
+  ],
+  "timeline": [
+    {"time": "2026-10-10 07:30", "title": "首次观测（模拟）", "detail": "合成时间线示例，未执行公开投放。"},
+    {"time": "2026-10-10 07:34", "title": "候选检测（模拟）", "detail": "未执行规则或上下文检测。"},
+    {"time": "2026-10-10 07:35", "title": "事件生成（模拟）", "detail": "未执行凭据指纹生成或关联。"},
+    {"time": "2026-10-10 07:36", "title": "告警准备", "detail": "阶段 0 仅展示通知状态，真实通知未实现。"}
+  ],
+  "actions": [
+    {"label": "确认公开泄露", "status": "功能未实现"},
+    {"label": "标记重复", "status": "功能未实现"},
+    {"label": "重新检查", "status": "功能未实现"},
+    {"label": "导出证据", "status": "功能未实现"}
+  ]
+}

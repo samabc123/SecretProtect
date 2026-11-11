@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro settings-page-intro">
+  <div><h2>个人与系统设置</h2><p>账号、授权平台与检测配置</p></div>
+  <div class="button-row"><button data-settings-refresh>重新读取</button><button class="button-primary" data-settings-save>保存全部配置</button></div>
+</div>
+{% if data.error %}<div class="notice" role="alert">{{ data.error }}</div>{% endif %}
+
+<div class="profile-summary">
+  <div class="profile-avatar">{{ current_user.username[0]|upper if current_user else "L" }}</div>
+  <div class="profile-copy"><strong>{{ current_user.username if current_user else "本地操作员" }}</strong><span>统一操作权限 · 本机工作空间</span><span>账号与配置持久化保存；敏感值不回显</span></div>
+  <span class="badge badge-low">已登录 · 真实会话</span>
+</div>
+<nav class="settings-tabs" role="tablist" aria-label="设置分类">
+  {% for key, title, description in [("account", "个人账号", "账号与会话"), ("general", "基础设置", "数据源与运行状态"), ("connections", "平台授权", "GitHub 与 Gitee"), ("sources", "来源任务", "创建与运行来源"), ("budget", "采集预算", "请求与文件上限"), ("verification", "凭据验证", "授权验证边界"), ("audit", "安全审计", "操作与决策记录")] %}
+  <button type="button" class="settings-tab" role="tab" id="tab-{{ key }}" data-settings-tab="{{ key }}" aria-controls="settings-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" {% if not loop.first %}tabindex="-1"{% endif %}><span class="settings-tab-index">{{ "%02d"|format(loop.index) }}</span><span><strong>{{ title }}</strong><small>{{ description }}</small></span></button>
+  {% endfor %}
+</nav>
+<section id="settings-account" role="tabpanel" aria-labelledby="tab-account" data-settings-panel="account">
+  <div class="settings-card">
+    <div class="settings-card-head"><div><h3>个人账号</h3><p>所有注册账号暂时共享相同操作权限与项目数据</p></div><div class="section-meta"><span class="badge badge-source">真实数据 · SQLite</span><span class="badge badge-status">已实现</span></div></div>
+    <div class="account-facts"><div><span>用户名</span><strong>{{ current_user.username if current_user else "-" }}</strong></div><div><span>权限模式</span><strong>统一权限</strong></div><div><span>会话有效期</span><strong>8 小时</strong></div></div>
+    {% if current_user and current_user.needs_password_change %}<div class="notice" data-password-warning>当前使用初始演示密码，请修改后再保存真实平台授权信息。</div>{% endif %}
+    <form method="post" action="/api/auth/password" class="settings-grid password-form" data-password-form>
+      <div class="field"><label for="current-password">当前密码</label><input id="current-password" name="current_password" type="password" autocomplete="current-password" maxlength="128" required></div>
+      <div class="field"><label for="new-password">新密码</label><input id="new-password" name="new_password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required></div>
+      <div class="field"><label for="confirm-new-password">确认新密码</label><input id="confirm-new-password" name="confirm_password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required></div>
+      <div class="field password-action"><button class="button-primary" type="submit">修改密码</button></div>
+      <p class="muted small field-wide" data-password-result role="status">修改密码后，其他已登录会话会立即失效。</p>
+    </form>
+  </div>
+</section>
+
+<section id="settings-general" role="tabpanel" aria-labelledby="tab-general" data-settings-panel="general" hidden>
+<div class="settings-card settings-card-status" data-settings-group>
+<div class="section-title"><h3>当前运行状态</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="settings-status-strip">
+  <div><span>连接器联网</span><strong data-runtime="network_enabled">读取中</strong></div>
+  <div><span>GitHub 就绪</span><strong data-runtime="github_ready">读取中</strong></div>
+  <div><span>Gitee 就绪</span><strong data-runtime="gitee_ready">读取中</strong></div>
+  <div><span>HMAC 密钥</span><strong data-runtime="hmac_configured">读取中</strong></div>
+</div>
+<div class="section-title"><h3>数据源</h3><div class="section-meta"><span class="badge badge-source">SQLite 设置库</span><span class="badge badge-status">已实现</span></div></div>
+<div class="settings-grid">
+  {% for key in ["DATA_SOURCE", "EVENTS_SOURCE", "MONITORING_SOURCE", "RESPONSE_SOURCE"] %}
+  {% set item = (data["items"] | selectattr("key", "equalto", key) | list | first) %}
+  <div class="field"><label for="setting-{{ key }}">{{ item.label }}</label><select id="setting-{{ key }}" data-setting="{{ key }}">{% for option in item.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select><span class="muted small">{{ item.description }}</span></div>
+  {% endfor %}
+</div>
+<div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存数据源配置</button></div>
+</div>
+</section>
+
+<section id="settings-sources" role="tabpanel" aria-labelledby="tab-sources" data-settings-panel="sources" hidden>
+<div class="settings-card settings-card-source-form">
+<div class="section-title"><h3>统一后端来源</h3><div class="section-meta"><span class="badge badge-source">真实数据：规范化后端 SQLite</span><span class="badge badge-status">部分实现</span></div></div>
+  <p class="source-note">配置 JSON 只保存目标和预算，不在此处填写 Token。请在“平台授权”中保存令牌和白名单；保存来源不会自动启动扫描。</p>
+  <form class="settings-grid" data-source-form>
+    <div class="field"><label for="source-name">来源名称</label><input id="source-name" name="name" required maxlength="200" placeholder="例如：团队授权仓库"></div>
+    <div class="field"><label for="source-collector">连接器</label><select id="source-collector" name="collector_key" required>{% for item in data.source_catalog %}<option value="{{ item.key }}">{{ item.title }}{% if item.network %}（需联网）{% endif %}</option>{% endfor %}</select></div>
+    <div class="field"><label for="source-mode">运行模式</label><select id="source-mode" name="mode"><option value="manual">手动</option><option value="continuous">持续调度</option></select></div>
+    <div class="field"><label for="source-interval">调度间隔（秒）</label><input id="source-interval" name="interval_sec" type="number" min="30" max="86400" value="300"></div>
+    <div class="field field-wide"><label for="source-config">连接器配置 JSON</label><textarea id="source-config" name="config" rows="4" required placeholder='{"path":"fixtures/controlled"}'></textarea><span class="muted small" data-source-config-hint>选择连接器后显示最小配置示例。</span></div>
+    <div class="field"><label class="switch-line"><input type="checkbox" name="enabled" checked> 启用来源</label><span class="muted small">禁用时不会启动扫描。</span></div>
+    <div class="button-row settings-actions field-wide"><button class="button-primary" type="submit">保存统一后端来源</button><span class="muted small" data-source-form-result></span></div>
+  </form>
+
+</div>
+<div class="settings-card settings-card-source-list">
+<div class="section-title"><h3>来源与任务记录</h3><div class="section-meta"><span class="badge badge-source">规范化后端 SQLite</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="settings-table"><table><thead><tr><th>来源</th><th>连接器</th><th>配置</th><th>状态</th><th>任务</th><th>操作</th></tr></thead><tbody data-source-list><tr><td colspan="6" class="muted">正在读取来源记录……</td></tr></tbody></table></div>
+</div>
+</section>
+
+<section id="settings-connections" role="tabpanel" aria-labelledby="tab-connections" data-settings-panel="connections" hidden>
+<div class="settings-card settings-card-shared" data-settings-group>
+  <div class="section-title"><h3>共用采集配置</h3><span class="badge badge-neutral">GitHub / Gitee</span></div>
+  <div class="settings-grid">
+    <div class="field">
+      <label for="setting-CONNECTOR_NETWORK_ENABLED">允许授权连接器联网</label>
+      <label class="switch-line"><input id="setting-CONNECTOR_NETWORK_ENABLED" data-setting="CONNECTOR_NETWORK_ENABLED" type="checkbox"><span>启用联网采集</span></label>
+    </div>
+    {% set hmac_item = (data["items"] | selectattr("key", "equalto", "CREDENTIAL_HMAC_KEY") | list | first) %}
+    <div class="field secret-field">
+      <label for="setting-CREDENTIAL_HMAC_KEY">凭据 HMAC 密钥 <span class="badge badge-neutral" data-setting-status="CREDENTIAL_HMAC_KEY">{{ "已配置" if hmac_item.configured else "未配置" }}</span></label>
+      <input id="setting-CREDENTIAL_HMAC_KEY" data-setting="CREDENTIAL_HMAC_KEY" type="password" autocomplete="new-password" placeholder="留空保持已保存的密钥">
+      <button type="button" data-clear-setting="false" data-setting="CREDENTIAL_HMAC_KEY">清除 HMAC 密钥</button>
+    </div>
+  </div>
+  <div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存共用配置</button></div>
+</div>
+<div class="settings-platform-grid">
+<div class="settings-card" data-settings-group>
+<div class="section-title"><h3>GitHub 授权连接</h3><div class="section-meta"><span class="badge badge-source">用户设置：SQLite</span><span class="badge badge-status">真实连接可选</span></div></div>
+  <p class="platform-status">就绪状态：<strong data-runtime="github_ready">读取中</strong></p>
+  <div class="settings-grid">
+    {% for key in ["GITHUB_API_BASE", "GITHUB_TOKEN"] %}
+    {% set item = (data["items"] | selectattr("key", "equalto", key) | list | first) %}
+    <div class="field {% if item.sensitive %}secret-field{% endif %}">
+      <label for="setting-{{ key }}">{{ item.label }}{% if item.sensitive %}<span class="badge badge-neutral" data-setting-status="{{ key }}">{{ "已配置" if item.configured else "未配置" }}</span>{% endif %}</label>
+      {% if item.kind == "boolean" %}
+      <label class="switch-line"><input id="setting-{{ key }}" data-setting="{{ key }}" type="checkbox"><span>允许授权采集联网</span></label>
+      {% elif item.sensitive %}
+      <input id="setting-{{ key }}" data-setting="{{ key }}" type="password" autocomplete="new-password" placeholder="{{ '留空保持当前配置；输入空值并保存可清除' if item.configured else '请输入授权值' }}">
+      <button type="button" data-clear-setting="false" data-setting="{{ key }}">清除当前{{ item.label }}</button>
+      {% else %}
+      <input id="setting-{{ key }}" data-setting="{{ key }}" type="text" value="{{ item.value or '' }}">
+      {% endif %}
+      <span class="muted small">{{ item.description }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="field repository-field"><label for="setting-GITHUB_REPOSITORIES">授权仓库白名单（每行一个 owner/repository）</label><textarea id="setting-GITHUB_REPOSITORIES" data-setting="GITHUB_REPOSITORIES" rows="4" placeholder="team/demo-repository"></textarea><span class="muted small">连接测试只检查所选仓库是否可访问，不扫描内容、不生成事件。</span></div>
+  <div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存 GitHub 设置</button><button data-github-test>测试选中仓库连接</button></div>
+  <p class="connection-result" data-github-test-result role="status">连接测试不扫描内容、不生成事件。</p>
+</div>
+
+<div class="settings-card" data-settings-group>
+<div class="section-title"><h3>Gitee 授权连接</h3><div class="section-meta"><span class="badge badge-source">用户设置：SQLite</span><span class="badge badge-status">真实连接可选</span></div></div>
+  <p class="platform-status">就绪状态：<strong data-runtime="gitee_ready">读取中</strong></p>
+  <div class="settings-grid">
+    {% for key in ["GITEE_API_BASE", "GITEE_TOKEN"] %}
+    {% set item = (data["items"] | selectattr("key", "equalto", key) | list | first) %}
+    <div class="field {% if item.sensitive %}secret-field{% endif %}">
+      <label for="setting-{{ key }}">{{ item.label }}{% if item.sensitive %}<span class="badge badge-neutral" data-setting-status="{{ key }}">{{ "已配置" if item.configured else "未配置" }}</span>{% endif %}</label>
+      {% if item.sensitive %}
+      <input id="setting-{{ key }}" data-setting="{{ key }}" type="password" autocomplete="new-password" placeholder="{{ '留空保持当前配置；输入空值并保存可清除' if item.configured else '请输入授权值' }}">
+      <button type="button" data-clear-setting="false" data-setting="{{ key }}">清除当前{{ item.label }}</button>
+      {% else %}
+      <input id="setting-{{ key }}" data-setting="{{ key }}" type="text" value="{{ item.value or '' }}">
+      {% endif %}
+      <span class="muted small">{{ item.description }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% set repo_item = (data["items"] | selectattr("key", "equalto", "GITEE_REPOSITORIES") | list | first) %}
+  <div class="field repository-field"><label for="setting-GITEE_REPOSITORIES">{{ repo_item.label }}（每行一个 owner/repository）</label><textarea id="setting-GITEE_REPOSITORIES" data-setting="GITEE_REPOSITORIES" rows="4" placeholder="team/demo-repository"></textarea><span class="muted small">{{ repo_item.description }}</span></div>
+  <div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存 Gitee 设置</button><button data-gitee-token-test>验证 Token 身份</button><button data-gitee-test>测试选中仓库连接</button></div>
+  <p class="connection-result" data-gitee-token-test-result role="status">Token 验证只访问 Gitee 身份端点，不读取仓库内容。</p>
+  <p class="connection-result" data-gitee-test-result role="status">仓库测试只读取仓库元数据，不扫描内容、不生成事件。</p>
+</div>
+</div>
+</section>
+
+<section id="settings-budget" role="tabpanel" aria-labelledby="tab-budget" data-settings-panel="budget" hidden>
+<div class="settings-card" data-settings-group>
+<div class="section-title"><h3>采集预算</h3><div class="section-meta"><span class="badge badge-source">SQLite 设置库</span><span class="badge badge-status">已实现</span></div></div>
+<div class="settings-grid">
+  {% for key in ["CONNECTOR_TIMEOUT_SECONDS", "CONNECTOR_MAX_FILES", "CONNECTOR_MAX_FILE_BYTES", "CONNECTOR_MIN_INTERVAL_SECONDS", "CONNECTOR_MAX_RETRIES"] %}
+  {% set item = (data["items"] | selectattr("key", "equalto", key) | list | first) %}
+  <div class="field"><label for="setting-{{ key }}">{{ item.label }}</label><input id="setting-{{ key }}" data-setting="{{ key }}" type="number" step="any" value="{{ item.value }}"><span class="muted small">{{ item.description }}</span></div>
+  {% endfor %}
+</div>
+<div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存采集预算</button></div>
+</div>
+</section>
+
+<section id="settings-verification" role="tabpanel" aria-labelledby="tab-verification" data-settings-panel="verification" hidden>
+<div class="settings-card" data-settings-group>
+<div class="section-title"><h3>授权凭据验证</h3><div class="section-meta"><span class="badge badge-source">用户设置：SQLite</span><span class="badge badge-status">部分实现</span></div></div>
+  <div class="settings-grid">
+    {% for key in ["VERIFICATION_NETWORK_ENABLED", "VERIFICATION_TIMEOUT_SECONDS"] %}
+    {% set item = (data["items"] | selectattr("key", "equalto", key) | list | first) %}
+    <div class="field">
+      <label for="setting-{{ key }}">{{ item.label }}</label>
+      {% if item.kind == "boolean" %}
+      <label class="switch-line"><input id="setting-{{ key }}" data-setting="{{ key }}" type="checkbox"><span>启用授权验证</span></label>
+      {% else %}
+      <input id="setting-{{ key }}" data-setting="{{ key }}" type="number" step="any" value="{{ item.value }}">
+      {% endif %}
+      <span class="muted small">{{ item.description }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% set fp_item = (data["items"] | selectattr("key", "equalto", "VERIFICATION_ALLOWED_FINGERPRINTS") | list | first) %}
+  <div class="field repository-field">
+    <label for="setting-VERIFICATION_ALLOWED_FINGERPRINTS">{{ fp_item.label }}</label>
+    <textarea id="setting-VERIFICATION_ALLOWED_FINGERPRINTS" data-setting="VERIFICATION_ALLOWED_FINGERPRINTS" rows="4" placeholder="从发现详情复制完整 HMAC 指纹，每行一个"></textarea>
+    <span class="muted small">{{ fp_item.description }}</span>
+  </div>
+  <p class="muted">验证只访问平台身份确认端点；不读取业务数据、不枚举资源、不执行撤销或修改。未开启联网或未加入白名单时，队列会记录“未授权/无法判断”，不会发起请求。</p>
+  <div class="settings-card-foot"><button class="button-primary" data-settings-save="group">保存验证配置</button></div>
+</div>
+</section>
+
+<section id="settings-audit" role="tabpanel" aria-labelledby="tab-audit" data-settings-panel="audit" hidden>
+<div class="settings-card">
+<div class="section-title"><h3>安全审计</h3><div class="section-meta"><span class="badge badge-source" data-audit-source>真实数据：规范化后端 SQLite security_audit</span><span class="badge badge-status" data-audit-status>部分实现</span></div></div>
+<div class="settings-table"><table><thead><tr><th>时间</th><th>角色</th><th>动作</th><th>资源</th><th>决策</th><th>原因</th><th>来源地址</th><th>元数据</th></tr></thead><tbody data-audit-rows><tr><td colspan="8" class="muted">正在读取安全审计……</td></tr></tbody></table></div>
+</div>
+</section>
+{% endblock %}

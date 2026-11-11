@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro"><div><h2>总览</h2><p>用于查看当前监控覆盖、事件规模与发现时效的产品总览。</p></div><div class="button-row"><button data-run-due>立即采集</button><button data-export-report>导出报告</button></div></div>
+<div class="section-title"><h3>核心指标</h3><div class="section-meta"><span class="badge badge-source">数据来源：{{ data.source }}</span><span class="badge badge-status">实现状态：{{ data.implementation_status }}</span></div></div>
+<div class="grid grid-4">
+  {% for item in data.metrics %}<div class="panel metric"><div class="label">{{ item.label }}</div><div class="value">{{ item.value }}</div><div class="hint">{{ item.hint }}</div></div>{% endfor %}
+</div>
+<div class="two-col">
+  <section><div class="section-title"><h3>渠道覆盖</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel"><div class="kpi-list">{% for item in data.channel_summary %}<div class="kpi-line"><span>{{ item.channel }}</span><strong>{{ item.platforms }} 个平台 / {{ item.objects }} 个对象</strong></div>{% endfor %}</div></div></section>
+  <section><div class="section-title"><h3>凭据类型分布</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div><div class="panel distribution-card"><div class="distribution-head"><span class="muted small">共 {{ data.credential_summary|length }} 类，默认展示前 10 类</span>{% if data.credential_summary|length > 10 %}<button type="button" data-open-credential-distribution>查看全部</button>{% endif %}</div><div class="kpi-list">{% for item in data.credential_summary[:10] %}<div class="kpi-line"><span>{{ item.type }}</span><strong>{{ item.count }}</strong></div>{% endfor %}{% if not data.credential_summary %}<div class="muted">当前没有真实检测结果。</div>{% endif %}</div></div></section>
+</div>
+{% if data.credential_summary|length > 10 %}<dialog class="distribution-dialog" data-credential-dialog><div class="dialog-head"><div><strong>全部凭据类型分布</strong><div class="muted small">按统一后端真实检测结果统计，不含桩数据、受控投放和离线导入。</div></div><button type="button" class="icon-button" data-close-credential-distribution aria-label="关闭">×</button></div><div class="dialog-list">{% for item in data.credential_summary %}<div class="kpi-line"><span>{{ item.type }}</span><strong>{{ item.count }}</strong></div>{% endfor %}</div></dialog>{% endif %}
+<div class="section-title"><h3>近期事件</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>事件</th><th>渠道</th><th>凭据类型</th><th>风险</th><th>处置状态</th><th>首次观测（北京时间）</th></tr></thead><tbody>{% for item in data.recent_events %}<tr><td><a href="/events/{{ item.event_id }}"><strong>{{ item.event_id }}</strong></a></td><td>{{ item.channel }}</td><td>{{ item.credential_type }}</td><td><span class="badge badge-{{ item.risk_level }}">{{ item.risk_level }}</span></td><td>{{ item.disposition }}</td><td>{{ item.first_observed_at|format_timestamp }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="section-title"><h3>时效摘要</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="grid grid-3">{% for item in data.latency_summary %}<div class="panel metric"><div class="label">{{ item.label }}</div><div class="value">{{ item.value }}</div><div class="hint">{{ item.note }}</div></div>{% endfor %}</div>
+<div class="section-title"><h3>统一后端实时摘要</h3><div class="section-meta"><span class="badge badge-source">真实数据：规范化后端 SQLite</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="grid grid-4" data-overview-unified>
+  <div class="panel metric"><div class="label">统一凭据实体</div><div class="value">-</div><div class="hint">credentials 表</div></div>
+  <div class="panel metric"><div class="label">统一出现位置</div><div class="value">-</div><div class="hint">occurrences 表</div></div>
+  <div class="panel metric"><div class="label">通知待处理</div><div class="value">-</div><div class="hint">offline-sqlite 队列</div></div>
+  <div class="panel metric"><div class="label">公开至检测 P95</div><div class="value">未知</div><div class="hint">无公开时间时保持未知</div></div>
+</div>
+<div class="section-title"><h3>通知队列</h3><div class="section-meta"><span class="badge badge-source" data-notification-source>真实数据：规范化后端 SQLite 离线通知队列</span><span class="badge badge-status" data-notification-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>通知</th><th>事件</th><th>风险</th><th>来源类型</th><th>状态</th><th>尝试次数</th><th>创建时间</th><th>操作</th></tr></thead><tbody data-notification-rows><tr><td colspan="8" class="muted">正在读取通知队列……</td></tr></tbody></table></div>
+{% endblock %}

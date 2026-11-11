@@ -1,0 +1,334 @@
+# 代码与制品平台凭据规则
+- id: github-pat
+  title: GitHub Personal Access Token
+  type: github_pat
+  vendor: github
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'ghp_[0-9A-Za-z]{36}'
+    - 'gho_[0-9A-Za-z]{36}'
+    - 'ghs_[0-9A-Za-z]{36}'
+    - 'ghu_[0-9A-Za-z]{36}'
+    - 'ghr_[0-9A-Za-z]{36}'
+    - 'github_pat_[0-9A-Za-z_]{60,120}'
+  min_length: 40
+  verifier: github-pat
+  tests:
+    positives:
+      - !synthetic "token: ghp_{test:alnum:36:21f520ad64de}"
+      - 'GITHUB_TOKEN=[REDACTED]'
+    negatives:
+      - 'token = ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+      - 'github_pat_short'
+
+- id: gitlab-pat
+  title: GitLab Personal Access Token
+  type: gitlab_pat
+  vendor: gitlab
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - 'glpat-[0-9A-Za-z_-]{20,}'
+  min_length: 26
+  verifier: gitlab-pat
+  tests:
+    positives:
+      - !synthetic "token = glpat-{test:alnum:20:2cfb5c611cf3}"
+    negatives:
+      - 'glpat-XXXX'
+
+- id: gitee-token
+  title: Gitee 私人令牌
+  type: gitee_token
+  vendor: gitee
+  version: 1
+  license: MIT
+  confidence: 70
+  patterns:
+    - '(?<![0-9A-Fa-f])([0-9a-f]{32})(?![0-9A-Fa-f])'
+  secret_group: 1
+  min_length: 32
+  max_length: 32
+  min_entropy: 2.8
+  required_context:
+    - '(?i)gitee'
+    - '(?i)private[_-]?token'
+    - '(?i)access[_-]?token'
+  verifier: gitee-token
+  tests:
+    positives:
+      - !synthetic "gitee access token: {test:hex:32:f1bcb49aab34}"
+    negatives:
+      - !synthetic "hash = {test:hex:32:f1bcb49aab34}"
+
+- id: slack-token
+  title: Slack Token
+  type: slack_token
+  vendor: slack
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'xox[baprs]-[0-9A-Za-z-]{10,}'
+  min_length: 16
+  verifier: slack-auth-test
+  tests:
+    positives:
+      - !synthetic "SLACK_BOT_TOKEN=xoxb-123456789012-{test:alnum:16:346d7be4a9e3}"
+    negatives:
+      - 'xoxb-xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxx'
+
+- id: npm-token
+  title: npm 发布令牌
+  type: npm_token
+  vendor: npm
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - 'npm_[A-Za-z0-9]{36}'
+  min_length: 40
+  tests:
+    positives:
+      - !synthetic "//registry.npmjs.org/:_authToken=npm_{test:alnum:36:21f520ad64de}"
+    negatives:
+      - 'npm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+- id: pypi-token
+  title: PyPI API Token
+  type: pypi_token
+  vendor: pypi
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - 'pypi-[A-Za-z0-9_-]{60,}'
+  min_length: 65
+  tests:
+    positives:
+      - !synthetic "password = pypi-{test:alnum:68:f70cfd1510f0}"
+    negatives:
+      - 'password = pypi-short'
+
+- id: huggingface-token
+  title: Hugging Face Token
+  type: huggingface_token
+  vendor: huggingface
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - 'hf_[A-Za-z0-9]{34}'
+  min_length: 37
+  tests:
+    positives:
+      - !synthetic "HF_TOKEN=hf_{test:alnum:34:7ef3e98d3758}"
+    negatives:
+      - 'hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+- id: dockerhub-token
+  title: Docker Hub Personal Access Token
+  type: dockerhub_token
+  vendor: docker
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    # Docker Hub documents the dckr_pat_ prefix but does not publish a fixed
+    # suffix length. Keep a bounded range so real PATs are accepted without
+    # turning arbitrary short assignments into provider-specific findings.
+    - 'dckr_pat_[A-Za-z0-9_-]{16,64}'
+  min_length: 25
+  max_length: 73
+  tests:
+    positives:
+      - !synthetic "dckr_pat_{test:alnum:36:21f520ad64de}"
+      - !synthetic "dckr_pat_{test:alnum:32:37836d58f6fa}"
+    negatives:
+      - 'dckr_pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+      - 'dckr_pat_short'
+
+- id: telegram-bot-token
+  title: Telegram Bot Token
+  type: telegram_bot_token
+  vendor: telegram
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![0-9])([0-9]{8,10}:AA[A-Za-z0-9_-]{33})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 44
+  max_length: 46
+  verifier: telegram-getme
+  tests:
+    positives:
+      - !synthetic "bot_token = 6123456789:AA{test:alnum:33:65859b6f9e30}"
+    negatives:
+      - !synthetic "12345:AA{test:alnum:32:de9d89678d40}"
+
+- id: stripe-live-key
+  title: Stripe Live Secret Key
+  type: stripe_live_key
+  vendor: stripe
+  version: 1
+  license: MIT
+  confidence: 95
+  patterns:
+    - '(?<![A-Za-z0-9])((?:sk|rk)_live_[0-9a-zA-Z]{24,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 32
+  tests:
+    positives:
+      - !synthetic "stripe: sk_live_{test:alnum:24:01be1786dab9}"
+    negatives:
+      - 'sk_live_SHORT'
+
+- id: stripe-test-key
+  title: Stripe Test Secret Key
+  type: stripe_test_key
+  vendor: stripe
+  version: 1
+  license: MIT
+  confidence: 35
+  patterns:
+    - '(?<![A-Za-z0-9])(sk_test_[0-9a-zA-Z]{24,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 32
+  tests:
+    positives:
+      - !synthetic "stripe_test = sk_test_{test:alnum:24:01be1786dab9}"
+    negatives:
+      - 'sk_test_SHORT'
+
+- id: dingtalk-webhook
+  title: 钉钉机器人 Webhook
+  type: dingtalk_webhook
+  vendor: dingtalk
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'oapi\.dingtalk\.com/robot/send\?access_token=[REDACTED]'
+  secret_group: 1
+  min_length: 64
+  max_length: 64
+  tests:
+    positives:
+      - 'https://oapi.dingtalk.com/robot/send?access_token=[REDACTED]'
+    negatives:
+      - 'https://oapi.dingtalk.com/robot/send?access_token=[REDACTED]'
+
+- id: feishu-wecom-secret
+  title: 飞书/企业微信应用密钥
+  type: feishu_wecom_secret
+  vendor: bytedance-tencent
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?i)(?:app_secret|corpsecret)["'']?[ \t]*[:=][ \t]*["'']?([A-Za-z0-9]{32})["'']?'
+  secret_group: 1
+  min_length: 32
+  max_length: 32
+  tests:
+    positives:
+      - !synthetic "app_secret = {test:alnum:32:1f67c9d41410}"
+      - !synthetic "\"corpsecret\": \"{test:alnum:32:be966033a85e}\""
+    negatives:
+      - 'app_secret = short'
+
+
+# 第三批扩展：平台 Webhook / 托管平台认证 URL / SaaS 令牌
+- id: feishu-webhook
+  title: 飞书机器人 Webhook
+  type: feishu_webhook
+  vendor: bytedance
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'open\.feishu\.cn/open-apis/bot/v2/hook/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
+  secret_group: 1
+  min_length: 36
+  max_length: 36
+  tests:
+    positives:
+      - 'https://open.feishu.cn/open-apis/bot/v2/hook/8f2c94d1-b7e3-5a06-c9f8-d2e41b7a9c63'
+    negatives:
+      - 'https://open.feishu.cn/open-apis/bot/v2/hook/short-uuid'
+
+- id: slack-webhook
+  title: Slack Incoming Webhook
+  type: slack_webhook
+  vendor: slack
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - 'hooks\.slack\.com/services/T[A-Za-z0-9]{8,12}/B[A-Za-z0-9]{8,12}/[A-Za-z0-9]{18,24}'
+  min_length: 55
+  max_length: 80
+  tests:
+    positives:
+      - !synthetic "https://hooks.slack.com/services/T01234567/B01234567/{test:alnum:20:b94c5b9bf73c}"
+    negatives:
+      - 'https://hooks.slack.com/services/T123/B456/short'
+
+- id: gitlab-runner-token
+  title: GitLab Runner 认证令牌（glrt-）
+  type: gitlab_runner_token
+  vendor: gitlab
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(glrt-[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 24
+  tests:
+    positives:
+      - !synthetic "runner token: glrt-{test:alnum:24:ee4e8b0a87cd}"
+    negatives:
+      - 'glrt-short'
+
+- id: git-http-basic-auth
+  title: Git 托管平台 HTTP 认证 URL（密码/令牌内嵌）
+  type: git_http_basic_auth
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - 'https://[A-Za-z0-9._%+-]+:([^\s''"@:]{10,120})@(github\.com|gitlab\.com|gitee\.com|bitbucket\.org)'
+  secret_group: 1
+  min_length: 10
+  max_length: 120
+  forbidden_secret_values:
+    - '^(?:password|pass|passwd|token|mytoken|123456|example|changeme|xxxxx)$'
+  tests:
+    positives:
+      - 'git clone https://deploy:S3cretPassX9@gitlab.com/owner/repo.git'
+    negatives:
+      - 'git clone https://deploy:password@gitlab.com/owner/repo.git'
+
+- id: grafana-service-account-token
+  title: Grafana 服务账号令牌（glsa_）
+  type: grafana_service_account_token
+  vendor: grafana
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(glsa_[A-Za-z0-9]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 37
+  max_length: 37
+  tests:
+    positives:
+      - !synthetic "GRAFANA_TOKEN=glsa_{test:alnum:32:435d6ae6a9dc}"
+    negatives:
+      - 'GRAFANA_TOKEN=glsa_short'

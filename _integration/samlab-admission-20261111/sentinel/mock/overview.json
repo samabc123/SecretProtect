@@ -1,0 +1,35 @@
+{
+  "page_title": "总览",
+  "source": "桩数据",
+  "implementation_status": "未实现",
+  "metrics": [
+    {"label": "监控任务", "value": 8, "hint": "计划支持的公开对象"},
+    {"label": "渠道类型", "value": 5, "hint": "不等同于真实在线覆盖"},
+    {"label": "唯一凭据", "value": 8, "hint": "合成样例，按事件主键展示"},
+    {"label": "P50 自动发现", "value": "4 min", "hint": "目标示例，待授权实验验证"}
+  ],
+  "channel_summary": [
+    {"channel": "代码托管", "platforms": 2, "objects": 3},
+    {"channel": "Wiki/知识共享", "platforms": 2, "objects": 2},
+    {"channel": "容器镜像", "platforms": 1, "objects": 1},
+    {"channel": "通用网页", "platforms": 1, "objects": 2}
+  ],
+  "credential_summary": [
+    {"type": "AK/SK", "count": 2},
+    {"type": "API Key", "count": 2},
+    {"type": "数据库连接串", "count": 1},
+    {"type": "SSH 私钥", "count": 1},
+    {"type": "OAuth Client Secret", "count": 1}
+  ],
+  "recent_events": [
+    {"event_id": "EVT-20261010-0008", "channel": "代码托管", "credential_type": "API Key", "risk_level": "high", "disposition": "待确认", "first_observed_at": "2026-10-10 09:28"},
+    {"event_id": "EVT-20261010-0007", "channel": "容器镜像", "credential_type": "数据库连接串", "risk_level": "critical", "disposition": "已复查", "first_observed_at": "2026-10-10 09:12"},
+    {"event_id": "EVT-20261010-0006", "channel": "Wiki", "credential_type": "SSH 私钥", "risk_level": "medium", "disposition": "重复事件", "first_observed_at": "2026-10-10 08:55"},
+    {"event_id": "EVT-20261010-0005", "channel": "通用网页", "credential_type": "OAuth Client Secret", "risk_level": "low", "disposition": "误报待复核", "first_observed_at": "2026-10-10 08:41"}
+  ],
+  "latency_summary": [
+    {"label": "公开至首次观测", "value": "待验证", "note": "公开时间未在桩数据中提供"},
+    {"label": "采集至检测", "value": "4 min", "note": "合成桩数据展示"},
+    {"label": "检测至告警", "value": "20 sec", "note": "目标示例，不是实测"}
+  ]
+}

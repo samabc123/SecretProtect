@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ data.title if data.title else "云上凭据泄露自动化检测系统" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">SecretRadar</div>
+    <div class="brand-sub">云上凭据泄露自动化检测</div>
+    <div class="nav-section">工作台</div>
+    <a class="nav-link {% if active_page == 'overview' %}active{% endif %}" href="/">总览</a>
+    <a class="nav-link {% if active_page == 'monitoring_tasks' %}active{% endif %}" href="/monitoring-tasks">监控任务</a>
+    <a class="nav-link {% if active_page == 'events' %}active{% endif %}" href="/events">事件列表</a>
+    <a class="nav-link {% if active_page == 'findings' %}active{% endif %}" href="/findings">统一发现项</a>
+    <a class="nav-link {% if active_page == 'verification' %}active{% endif %}" href="/verification">验证中心</a>
+    <a class="nav-link {% if active_page == 'channels' %}active{% endif %}" href="/channels">渠道与规则</a>
+    <a class="nav-link {% if active_page == 'reports' %}active{% endif %}" href="/reports">指标报告</a>
+    <div class="nav-section">项目管理</div>
+    <a class="nav-link {% if active_page == 'implementation_status' %}active{% endif %}" href="/implementation-status">实现状态总览</a>
+    <a class="nav-link {% if active_page == 'settings' %}active{% endif %}" href="/settings">系统设置</a>
+    <a class="nav-link {% if active_page == 'connector_runs' %}active{% endif %}" href="/connector-runs">运行审计</a>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <h1>{{ data.page_title }}</h1>
+      <div class="topbar-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span>{% if current_user %}<a class="account-link" href="/settings#account">{{ current_user.username }}</a><button type="button" class="button-quiet" data-logout>退出登录</button>{% endif %}</div>
+    </header>
+    <div class="content">
+      <div id="action-notice" class="notice" hidden></div>
+      {% block content %}{% endblock %}
+      <div class="footer">GitHub / Gitee 采集仅在明确开启联网并配置授权仓库、Token 与 HMAC 密钥后执行；合成样例不代表真实泄露。</div>
+    </div>
+  </main>
+</div>
+<script src="{{ url_for('static', path='js/app.js') }}"></script>
+</body>
+</html>

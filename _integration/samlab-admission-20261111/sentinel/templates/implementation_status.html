@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro"><div><h2>实现状态总览</h2><p>“界面模块 × 所需后端能力 × 当前状态 × 依赖”是后续填充的主进度表。</p></div><button data-refresh-page>刷新状态</button></div>
+<div class="section-title"><h3>主进度表</h3><div class="section-meta"><span class="badge badge-source">{{ data.source }}</span><span class="badge badge-status">{{ data.implementation_status }}</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>界面模块</th><th>所需后端能力</th><th>当前状态</th><th>依赖</th><th>验收证据</th><th>建议顺序</th></tr></thead><tbody>{% for item in data["items"] %}<tr><td><strong>{{ item.module }}</strong></td><td>{{ item.backend }}</td><td><span class="badge badge-{{ item.status_color }}">{{ item.status }}</span></td><td>{{ item.dependencies }}</td><td>{{ item.evidence }}</td><td>{{ item.order }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="section-title"><h3>状态定义</h3><div class="section-meta"><span class="badge badge-source">团队设计</span><span class="badge badge-status">当前阶段</span></div></div>
+<div class="grid grid-3">{% for item in data.legend %}<div class="panel"><strong>{{ item.label }}</strong><p class="muted">{{ item.description }}</p></div>{% endfor %}</div>
+{% endblock %}

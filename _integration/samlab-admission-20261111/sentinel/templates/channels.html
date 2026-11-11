@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro">
+  <div><h2>渠道与规则</h2><p>按渠道插件、凭据规则和验证器分别展示实现状态、联网条件与证据边界。</p></div>
+  <div class="button-row"><a class="button" href="/settings#connections">平台授权</a><a class="button" href="/settings#sources">来源任务</a><button class="button-primary" data-channels-refresh>刷新矩阵</button><button data-experiments-run>运行离线扩展性实验</button></div>
+</div>
+<div class="section-title"><h3>渠道覆盖矩阵</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端能力表</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>名称</th><th>渠道</th><th>平台</th><th>模式</th><th>代码实现</th><th>离线验证</th><th>真实平台实测</th><th>综合状态</th><th>证据</th></tr></thead><tbody data-collector-rows><tr><td colspan="9" class="muted">正在读取连接器矩阵……</td></tr></tbody></table></div>
+<div class="section-title"><h3>正式支持矩阵</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：support_matrix</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>类别</th><th>渠道/凭据类型</th><th>平台/厂商</th><th>公开载体或格式</th><th>权限条件</th><th>采集/解析</th><th>巡检方式</th><th>状态</th><th>证据</th></tr></thead><tbody data-support-matrix-rows><tr><td colspan="9" class="muted">正在读取正式支持矩阵……</td></tr></tbody></table></div>
+<div class="section-title"><h3>凭据规则</h3><div class="section-meta"><span class="badge badge-source">真实数据：SQLite rule_records</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>规则 ID</th><th>标题</th><th>类型</th><th>厂商</th><th>版本</th><th>代码实现</th><th>离线验证</th><th>真实平台</th><th>启用</th><th>证据</th><th>操作</th></tr></thead><tbody data-rule-rows><tr><td colspan="11" class="muted">正在读取规则……</td></tr></tbody></table></div>
+<div class="section-title"><h3>验证器能力</h3><div class="section-meta"><span class="badge badge-source">真实数据：后端注册表</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="grid grid-3" data-verifier-cards><div class="panel muted">正在读取验证器……</div></div>
+<div class="section-title"><h3>扩展性实验记录</h3><div class="section-meta"><span class="badge badge-source">真实数据：extensibility_experiments</span><span class="badge badge-status">未开展项保留为空</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>连接器</th><th>状态</th><th>代码量</th><th>配置项</th><th>工时</th><th>测试耗时</th><th>checkpoint</th><th>失败恢复</th><th>证据/备注</th></tr></thead><tbody data-experiment-rows><tr><td colspan="9" class="muted">正在读取扩展性实验记录……</td></tr></tbody></table></div>
+<p class="source-note">“已实现”表示代码契约和离线验证存在；“已实测”只在获得授权并留下运行证据后成立。公开渠道数量不包含预留接口或离线样例。</p>
+{% endblock %}

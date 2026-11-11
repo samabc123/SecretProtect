@@ -1,0 +1,303 @@
+# Additional service tokens with stable prefixes or strong surrounding context.
+- id: digitalocean-token
+  title: DigitalOcean Personal Access Token
+  type: digitalocean_token
+  vendor: digitalocean
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(dop_v1_[A-Za-z0-9_-]{32,128})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 39
+  tests:
+    positives:
+      - !synthetic "DIGITALOCEAN_TOKEN=dop_v1_{test:alnum:46:4ba3b3de8ff7}"
+    negatives:
+      - 'DIGITALOCEAN_TOKEN=dop_v1_short'
+
+- id: vault-service-token
+  title: HashiCorp Vault Service Token
+  type: vault_service_token
+  vendor: hashicorp
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(hvs\.[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+    - '(?<![A-Za-z0-9])(s\.[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  min_length: 22
+  tests:
+    positives:
+      - !synthetic "VAULT_TOKEN=hvs.{test:alnum:32:124b253a5c06}"
+    negatives:
+      - 'VAULT_TOKEN=hvs.short'
+
+- id: linear-api-key
+  title: Linear API Key
+  type: linear_api_key
+  vendor: linear
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(lin_api_[A-Za-z0-9]{30,})(?![A-Za-z0-9])'
+  min_length: 38
+  tests:
+    positives:
+      - !synthetic "LINEAR_API_KEY=lin_api_{test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'LINEAR_API_KEY=lin_api_short'
+
+- id: pulumi-access-token
+  title: Pulumi Access Token
+  type: pulumi_access_token
+  vendor: pulumi
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(pul-[A-Za-z0-9_-]{32,})(?![A-Za-z0-9_-])'
+  min_length: 36
+  tests:
+    positives:
+      - !synthetic "PULUMI_ACCESS_TOKEN=pul-{test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'PULUMI_ACCESS_TOKEN=pul-short'
+
+- id: postman-api-key
+  title: Postman API Key
+  type: postman_api_key
+  vendor: postman
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(PMAK-[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  min_length: 25
+  tests:
+    positives:
+      - !synthetic "POSTMAN_API_KEY=PMAK-{test:alnum:40:08bf826b95aa}"
+    negatives:
+      - 'POSTMAN_API_KEY=PMAK-short'
+
+- id: datadog-api-key
+  title: Datadog API Key
+  type: datadog_api_key
+  vendor: datadog
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?<![A-Za-z0-9])([0-9a-f]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 32
+  max_length: 32
+  min_entropy: 2.8
+  required_context:
+    - '(?i)(datadog|dd[_-]?api[_-]?key)'
+  tests:
+    positives:
+      - !synthetic "DD_API_KEY={test:hex:32:f1bcb49aab34}"
+    negatives:
+      - !synthetic "hash={test:hex:32:f1bcb49aab34}"
+
+- id: google-api-key
+  title: Google API Key
+  type: google_api_key
+  vendor: google
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(AIza[0-9A-Za-z_-]{36})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 40
+  max_length: 40
+  required_context:
+    - '(?i)(google|firebase|maps|youtube|api[_-]?key)'
+  tests:
+    positives:
+      - !synthetic "GOOGLE_MAPS_API_KEY=AIza{test:alnum:36:abf54d585737}"
+    negatives:
+      - !synthetic "random=AIza{test:alnum:36:abf54d585737}"
+
+- id: mapbox-access-token
+  title: Mapbox Access Token
+  type: mapbox_access_token
+  vendor: mapbox
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])((?:pk|sk)[.]eyJ1Ijoi[A-Za-z0-9_-]{20,}[.][A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 60
+  tests:
+    positives:
+      - !synthetic "MAPBOX_TOKEN=pk.eyJ1Ijoi{test:alnum:38:9c412e9dbcd3}.{test:alnum:27:ef746b98bd0a}"
+    negatives:
+      - 'MAPBOX_TOKEN=pk.eyJ1Ijoi-short'
+
+- id: databricks-personal-access-token
+  title: Databricks Personal Access Token
+  type: databricks_pat
+  vendor: databricks
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(dapi[0-9a-f]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 36
+  max_length: 36
+  tests:
+    positives:
+      - !synthetic "DATABRICKS_TOKEN=dapi{test:hex:32:f1bcb49aab34}"
+    negatives:
+      - 'DATABRICKS_TOKEN=dapi-short'
+
+- id: vercel-token
+  title: Vercel Token
+  type: vercel_token
+  vendor: vercel
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(vercel_[A-Za-z0-9]{24,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 31
+  tests:
+    positives:
+      - !synthetic "VERCEL_TOKEN=vercel_{test:alnum:31:e8c0403e3389}"
+    negatives:
+      - 'VERCEL_TOKEN=vercel_short'
+
+- id: cloudflare-api-token
+  title: Cloudflare API Token
+  type: cloudflare_api_token
+  vendor: cloudflare
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?<![A-Za-z0-9])([A-Za-z0-9_-]{40})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 40
+  max_length: 40
+  min_entropy: 3.0
+  required_context:
+    - '(?i)(cloudflare|cf[_-]?api|api[_-]?token)'
+  tests:
+    positives:
+      - !synthetic "CLOUDFLARE_API_TOKEN={test:hex:40:89f026fc74a0}"
+    negatives:
+      - !synthetic "hash={test:hex:40:89f026fc74a0}"
+
+- id: circleci-personal-token
+  title: CircleCI Personal Token
+  type: circleci_token
+  vendor: circleci
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?i)(?:circle[_-]?ci[_-]?token|circle[_-]?token)["'']?\s*[:=]\s*["'']?(?P<secret>[A-Za-z0-9]{40})["'']?'
+  min_length: 40
+  max_length: 40
+  min_entropy: 3.0
+  tests:
+    positives:
+      - !synthetic "CIRCLECI_TOKEN={test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'CIRCLECI_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+- id: bitbucket-app-password
+  title: Bitbucket App Password
+  type: bitbucket_app_password
+  vendor: bitbucket
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?i)(?:bitbucket[_-]?app[_-]?password|app[_-]?password)["'']?\s*[:=]\s*["'']?(?P<secret>[A-Za-z0-9]{20})["'']?'
+  min_length: 20
+  max_length: 20
+  min_entropy: 2.8
+  tests:
+    positives:
+      - !synthetic "BITBUCKET_APP_PASSWORD={test:alnum:20:2cfb5c611cf3}"
+    negatives:
+      - 'BITBUCKET_APP_PASSWORD=short'
+
+- id: azure-devops-pat
+  title: Azure DevOps Personal Access Token
+  type: azure_devops_pat
+  vendor: azure-devops
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?i)(?:azure[_-]?devops|azdo)[^=\n]{0,30}(?:token|pat)["'']?\s*[:=]\s*["'']?(?P<secret>[A-Za-z0-9]{52})["'']?'
+  min_length: 52
+  max_length: 52
+  min_entropy: 3.0
+  tests:
+    positives:
+      - !synthetic "AZURE_DEVOPS_PAT={test:alnum:52:1373a11fdc87}"
+    negatives:
+      - 'AZURE_DEVOPS_PAT=short'
+
+- id: discord-bot-token
+  title: Discord Bot Token
+  type: discord_bot_token
+  vendor: discord
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{24}[.][A-Za-z0-9_-]{6}[.][A-Za-z0-9_-]{27})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 59
+  required_context:
+    - '(?i)(discord|bot[_-]?token)'
+  tests:
+    positives:
+      - !synthetic "DISCORD_BOT_TOKEN={test:alnum:24:4980393012e7}.Abc123.{test:alnum:27:f0a860087e60}"
+    negatives:
+      - 'DISCORD_BOT_TOKEN=short.token.value'
+
+- id: snyk-api-token
+  title: Snyk API Token
+  type: snyk_api_token
+  vendor: snyk
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(snyk_[A-Za-z0-9]{43})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 48
+  tests:
+    positives:
+      - !synthetic "SNYK_TOKEN=snyk_{test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'SNYK_TOKEN=snyk_short'
+
+- id: doppler-service-token
+  title: Doppler Service Token
+  type: doppler_service_token
+  vendor: doppler
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(dp[.]st[.][A-Za-z0-9]{43})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 49
+  tests:
+    positives:
+      - !synthetic "DOPPLER_TOKEN=dp.st.{test:alnum:43:3458f31c6365}"
+    negatives:
+      - 'DOPPLER_TOKEN=dp.st.short'

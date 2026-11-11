@@ -1,0 +1,213 @@
+# Additional common SaaS, platform and AI service credential formats.
+- id: heroku-api-key
+  title: Heroku API Key
+  type: heroku_api_key
+  vendor: heroku
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(heroku_[A-Za-z0-9]{24,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 31
+  tests:
+    positives:
+      - !synthetic "HEROKU_API_KEY=heroku_{test:alnum:28:531cad85a0fa}"
+    negatives:
+      - 'HEROKU_API_KEY=heroku_short'
+
+- id: mailchimp-api-key
+  title: Mailchimp API Key
+  type: mailchimp_api_key
+  vendor: mailchimp
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])([a-f0-9]{32}-us[0-9]{1,3})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 36
+  required_context:
+    - '(?i)(mailchimp|mandrill|marketing)'
+  tests:
+    positives:
+      - !synthetic "MAILCHIMP_API_KEY={test:hex:32:f1bcb49aab34}-us21"
+    negatives:
+      - !synthetic "MAILCHIMP_API_KEY={test:hex:16:582bbc6886b8}-us21"
+
+- id: airtable-personal-access-token
+  title: Airtable Personal Access Token
+  type: airtable_pat
+  vendor: airtable
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(pat[A-Za-z0-9]{14,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 17
+  tests:
+    positives:
+      - !synthetic "AIRTABLE_PAT=pat{test:alnum:22:02eeacf41f08}"
+    negatives:
+      - 'AIRTABLE_PAT=pat_short'
+
+- id: supabase-service-role-key
+  title: Supabase Service Role JWT
+  type: supabase_service_role_key
+  vendor: supabase
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?i)supabase[^=\n]{0,40}=\s*(?P<secret>eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
+  min_length: 40
+  tests:
+    positives:
+      - !synthetic "SUPABASE_SERVICE_ROLE_KEY=eyJ{test:alnum:17:73bc28b6250f}.{test:alnum:16:2fa8b4d7e67c}.{test:alnum:18:00d201a878d8}"
+    negatives:
+      - 'SUPABASE_SERVICE_ROLE_KEY=eyJ.short'
+
+- id: firebase-server-key
+  title: Firebase Server Key
+  type: firebase_server_key
+  vendor: firebase
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(AAAA[A-Za-z0-9_-]{20,}:[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 45
+  required_context:
+    - '(?i)(firebase|fcm|server[_-]?key)'
+  tests:
+    positives:
+      - !synthetic "FIREBASE_SERVER_KEY=AAAA{test:alnum:30:81f0674bb00c}:{test:alnum:25:3919294ae061}"
+    negatives:
+      - 'FIREBASE_SERVER_KEY=AAAAshort:short'
+
+- id: launchdarkly-sdk-key
+  title: LaunchDarkly SDK Key
+  type: launchdarkly_sdk_key
+  vendor: launchdarkly
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(sdk-[a-f0-9]{32})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 36
+  required_context:
+    - '(?i)(launchdarkly|ld[_-]?sdk)'
+  tests:
+    positives:
+      - !synthetic "LAUNCHDARKLY_SDK_KEY=sdk-{test:hex:32:f1bcb49aab34}"
+    negatives:
+      - 'LAUNCHDARKLY_SDK_KEY=sdk-short'
+
+- id: okta-api-token
+  title: Okta API Token
+  type: okta_api_token
+  vendor: okta
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(00[A-Za-z0-9_-]{38})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 40
+  required_context:
+    - '(?i)(okta|api[_-]?token)'
+  tests:
+    positives:
+      - !synthetic "OKTA_API_TOKEN=00{test:alnum:38:99ee04bf3a21}"
+    negatives:
+      - 'OKTA_API_TOKEN=00short'
+
+- id: planetscale-password
+  title: PlanetScale Password
+  type: planetscale_password
+  vendor: planetscale
+  version: 1
+  license: MIT
+  confidence: 80
+  patterns:
+    - '(?<![A-Za-z0-9])(pscale_pw_[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])'
+  secret_group: 1
+  min_length: 29
+  tests:
+    positives:
+      - !synthetic "PLANETSCALE_PASSWORD=pscale_pw_{test:alnum:26:fa61d2150ed7}"
+    negatives:
+      - 'PLANETSCALE_PASSWORD=pscale_pw_short'
+
+- id: replicate-api-token
+  title: Replicate API Token
+  type: replicate_api_token
+  vendor: replicate
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(r8_[A-Za-z0-9]{32,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 35
+  tests:
+    positives:
+      - !synthetic "REPLICATE_API_TOKEN=r8_{test:alnum:32:054bf084c325}"
+    negatives:
+      - 'REPLICATE_API_TOKEN=r8_short'
+
+- id: groq-api-key
+  title: Groq API Key
+  type: groq_api_key
+  vendor: groq
+  version: 1
+  license: MIT
+  confidence: 85
+  patterns:
+    - '(?<![A-Za-z0-9])(gsk_[A-Za-z0-9]{40,})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 44
+  tests:
+    positives:
+      - !synthetic "GROQ_API_KEY=gsk_{test:alnum:42:938880678ee2}"
+    negatives:
+      - 'GROQ_API_KEY=gsk_short'
+
+- id: mistral-api-key
+  title: Mistral API Key
+  type: mistral_api_key
+  vendor: mistral
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?i)mistral[^=\n]{0,30}=\s*(?P<secret>[A-Za-z0-9]{32})'
+  min_length: 32
+  max_length: 32
+  min_entropy: 2.8
+  tests:
+    positives:
+      - !synthetic "MISTRAL_API_KEY={test:alnum:32:49c3c20202dd}"
+    negatives:
+      - 'MISTRAL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+- id: cohere-api-key
+  title: Cohere API Key
+  type: cohere_api_key
+  vendor: cohere
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?i)cohere[^=\n]{0,30}=\s*(?P<secret>[A-Za-z0-9]{40})'
+  min_length: 40
+  max_length: 40
+  min_entropy: 2.8
+  tests:
+    positives:
+      - !synthetic "COHERE_API_KEY={test:alnum:40:c6a02f825a08}"
+    negatives:
+      - 'COHERE_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'

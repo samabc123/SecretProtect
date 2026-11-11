@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro">
+  <div><h2>连接器运行审计</h2><p>查看每次来源运行的触发方式、候选数量、入库数量和安全错误码。</p></div>
+  <button class="button-primary" data-runs-refresh>刷新记录</button>
+</div>
+<div class="section-title"><h3>运行记录</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端 SQLite</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>运行 ID</th><th>连接器</th><th>目标</th><th>任务</th><th>开始（北京时间）</th><th>结束（北京时间）</th><th>耗时</th><th>状态</th><th>候选</th><th>入库</th><th>错误码</th></tr></thead><tbody data-runs-rows><tr><td colspan="11" class="muted">正在读取运行记录……</td></tr></tbody></table></div>
+{% endblock %}

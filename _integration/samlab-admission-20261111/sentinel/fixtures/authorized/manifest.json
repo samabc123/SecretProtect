@@ -1,0 +1,11 @@
+{
+  "manifest_version": "1.0",
+  "authorization_id": "AUTH-DEMO-20261010",
+  "owner": "参赛团队自有测试载体",
+  "authorization_scope": "仅允许离线读取本目录内的合成样例导出，不允许网络访问、登录或业务调用",
+  "expires_at": "2099-12-31",
+  "channel": "代码托管",
+  "platform": "授权离线导出示例",
+  "export_file": "events.jsonl",
+  "synthetic_only": true
+}

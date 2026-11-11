@@ -1,0 +1,29 @@
+{
+  "page_title": "监控任务",
+  "schema_version": "1.0",
+  "source": "桩数据",
+  "implementation_status": "未实现",
+  "error": null,
+  "filters": [
+    {"key": "channel", "label": "渠道类型", "default": "全部渠道", "options": ["代码托管", "Wiki", "知识共享", "容器镜像", "通用网页"]},
+    {"key": "status", "label": "运行状态", "default": "全部状态", "options": ["运行中", "待配置", "采集失败", "已暂停"]},
+    {"key": "collection_method", "label": "采集方式", "default": "全部方式", "options": ["公开 API", "公开页面", "Manifest/Layer", "HTTP GET"]}
+  ],
+  "runs": [],
+  "summary": [
+    {"label": "任务总数", "value": 8, "hint": "桩数据"},
+    {"label": "运行中", "value": 4, "hint": "未连接真实调度器"},
+    {"label": "待配置", "value": 2, "hint": "计划支持"},
+    {"label": "采集失败", "value": 2, "hint": "用于展示恢复场景"}
+  ],
+  "items": [
+    {"task_id": "TASK-001", "task_name": "代码仓库增量监控", "channel": "代码托管", "platform": "GitHub", "monitor_object": "team-demo/release-notes", "collection_method": "公开 API", "schedule": "5 分钟", "last_run": "2026-10-10 09:30", "status": "运行中", "status_color": "low"},
+    {"task_id": "TASK-002", "task_name": "代码仓库页面监控", "channel": "代码托管", "platform": "Gitee", "monitor_object": "demo-org/config-samples", "collection_method": "公开页面", "schedule": "10 分钟", "last_run": "2026-10-10 09:20", "status": "运行中", "status_color": "low"},
+    {"task_id": "TASK-003", "task_name": "Wiki 修订监控", "channel": "Wiki", "platform": "MediaWiki", "monitor_object": "授权测试站点", "collection_method": "公开 API", "schedule": "10 分钟", "last_run": "2026-10-10 09:10", "status": "运行中", "status_color": "low"},
+    {"task_id": "TASK-004", "task_name": "知识页面监控", "channel": "知识共享", "platform": "公开测试站", "monitor_object": "https://authorized.example/docs", "collection_method": "公开页面", "schedule": "10 分钟", "last_run": "2026-10-10 09:00", "status": "运行中", "status_color": "low"},
+    {"task_id": "TASK-005", "task_name": "镜像层扫描", "channel": "容器镜像", "platform": "测试 Registry", "monitor_object": "demo/app:authorized", "collection_method": "Manifest/Layer", "schedule": "15 分钟", "last_run": "2026-10-10 08:40", "status": "采集失败", "status_color": "high"},
+    {"task_id": "TASK-006", "task_name": "公开网页回放", "channel": "通用网页", "platform": "本地回放", "monitor_object": "mock://public-page-01", "collection_method": "HTTP GET", "schedule": "10 分钟", "last_run": "2026-10-10 08:30", "status": "待配置", "status_color": "medium"},
+    {"task_id": "TASK-007", "task_name": "镜像失败恢复演示", "channel": "容器镜像", "platform": "本地回放", "monitor_object": "mock://image-layer-01", "collection_method": "Manifest/Layer", "schedule": "手动", "last_run": "2026-10-10 08:20", "status": "采集失败", "status_color": "high"},
+    {"task_id": "TASK-008", "task_name": "网页样例导入", "channel": "通用网页", "platform": "本地回放", "monitor_object": "mock://public-page-02", "collection_method": "HTTP GET", "schedule": "手动", "last_run": "2026-10-10 08:10", "status": "待配置", "status_color": "medium"}
+  ]
+}

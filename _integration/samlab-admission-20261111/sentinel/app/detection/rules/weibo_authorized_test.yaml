@@ -1,0 +1,20 @@
+# 微博 OAuth 离线夹具专用规则。
+# 只匹配本项目明确生成的受控测试前缀，不用于判断真实微博凭据。
+- id: weibo-authorized-test-token
+  title: 微博 OAuth 受控测试令牌
+  type: weibo_authorized_test_token
+  vendor: weibo
+  version: 1
+  license: MIT
+  confidence: 95
+  patterns:
+    - '\bSR_WEIBO_TEST_TOKEN_[A-Z0-9]{24}\b'
+  min_length: 44
+  max_length: 44
+  verifier: null
+  tests:
+    positives:
+      - !synthetic "微博 OAuth 离线夹具：SR_WEIBO_TEST_TOKEN_{test:upper:24:7ce59b4d15c1}"
+    negatives:
+      - '微博 OAuth 正式内容：SR_WEIBO_TEST_TOKEN_SHORT'
+      - !synthetic "普通文本：WEIBO_TEST_TOKEN_{test:upper:24:7ce59b4d15c1}"

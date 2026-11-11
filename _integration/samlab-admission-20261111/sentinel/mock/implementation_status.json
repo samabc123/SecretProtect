@@ -1,0 +1,24 @@
+{
+  "page_title": "实现状态总览",
+  "source": "桩数据 / 项目计划",
+  "implementation_status": "未实现",
+  "items": [
+    {"module": "总览", "backend": "聚合查询、指标缓存、时效摘要", "status": "界面桩数据", "status_color": "medium", "dependencies": "事件、任务、报告接口", "evidence": "页面可访问；真实聚合未实现", "order": "5"},
+    {"module": "监控任务", "backend": "任务表、调度器、限流、断点恢复", "status": "界面桩数据", "status_color": "medium", "dependencies": "统一采集接口、SQLite", "evidence": "桩任务表；真实调度未实现", "order": "3"},
+    {"module": "事件列表", "backend": "候选、事件、去重、筛选和分页", "status": "部分实现：SQLite读取、筛选、分页、排序", "status_color": "medium", "dependencies": "检测引擎、事件表、EVENTS_SOURCE", "evidence": "app/event_store.py；app/data_access.py；tests/test_events.py；阶段14专项测试", "order": "1"},
+    {"module": "事件详情", "backend": "证据链、时间线、复查记录、状态流转", "status": "界面桩数据", "status_color": "medium", "dependencies": "事件主键、脱敏存储", "evidence": "详情页面可访问；操作未实现", "order": "2"},
+    {"module": "指标报告", "backend": "五项评价聚合、时间统计、扩展性实验", "status": "界面桩数据", "status_color": "medium", "dependencies": "事件、任务和实验记录", "evidence": "指标展示；实测未实现", "order": "4"},
+    {"module": "实现状态总览", "backend": "模块注册表、验收证据和状态更新", "status": "界面桩数据", "status_color": "medium", "dependencies": "各模块状态回写", "evidence": "主进度表页面可访问", "order": "持续"},
+    {"module": "统一数据访问层", "backend": "mock/real开关、契约校验、失败降级", "status": "桩已接入", "status_color": "low", "dependencies": "配置文件、API模型", "evidence": "DATA_SOURCE=mock/real路径已保留", "order": "基础"},
+    {"module": "告警与响应", "backend": "通知、反馈、复查、权限和审计", "status": "部分实现", "status_color": "medium", "dependencies": "SQLite告警队列、离线通知桩、事件反馈API", "evidence": "app/alert_store.py；tests/test_alerts.py；docs/stage12-verification.md；外部通知未接入", "order": "12"},
+    {"module": "受控检测与事件生成", "backend": "本地授权夹具解析、候选规则、脱敏事件写入", "status": "部分实现", "status_color": "low", "dependencies": "显式夹具目录、SQLite事件表", "evidence": "app/controlled_detector.py；tests/test_controlled_detector.py", "order": "5"},
+    {"module": "凭据指纹与唯一关联", "backend": "带密钥HMAC、候选统计、唯一凭据去重", "status": "部分实现", "status_color": "low", "dependencies": "CREDENTIAL_HMAC_KEY、事件契约", "evidence": "app/fingerprint.py；tests/test_fingerprint.py；docs/stage6-contract.md", "order": "6"},
+    {"module": "公开渠道连接器与离线授权导入", "backend": "连接器协议、授权manifest、离线JSONL导入、Wiki/RSS/Stack Overflow/OCI/APK/wxapkg", "status": "代码已实现；离线测试通过", "status_color": "low", "dependencies": "授权载体、CREDENTIAL_HMAC_KEY；网络连接器默认关闭", "evidence": "app/connectors.py；app/public_http.py；app/public_connectors.py；tests/test_public_connectors.py", "order": "7"},
+    {"module": "真实授权平台连接器与调度", "backend": "GitHub/Gitee授权API、公开渠道采集、白名单、限流退避、预算、checkpoint、运行审计", "status": "部分实现；真实平台实测待授权", "status_color": "low", "dependencies": "明确授权仓库或公开目标、CREDENTIAL_HMAC_KEY、CONNECTOR_NETWORK_ENABLED", "evidence": "app/backend_pipeline.py；app/github_connector.py；app/gitee_connector.py；app/public_connectors.py；tests/test_public_connectors.py；默认关闭网络", "order": "8"}
+  ],
+  "legend": [
+    {"label": "桩已接入", "description": "前端通过统一数据访问层读取本地 JSON，契约样例已冻结。"},
+    {"label": "界面桩数据", "description": "页面长相和交互入口已展示，但后端能力尚未实现。"},
+    {"label": "未实现", "description": "没有可核验的运行证据，不能对外宣称已支持或已实测。"}
+  ]
+}

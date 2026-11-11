@@ -1,0 +1,95 @@
+# 通用授权头与新型 AI 平台凭据规则。
+# 这些规则只匹配明确的认证上下文，避免把普通随机字符串当成凭据。
+- id: openrouter-api-key
+  title: OpenRouter API Key
+  type: openrouter_api_key
+  vendor: openrouter
+  version: 1
+  license: MIT
+  confidence: 90
+  patterns:
+    - '(?<![A-Za-z0-9])(sk-or-v1-[a-f0-9]{64})(?![A-Za-z0-9])'
+  secret_group: 1
+  min_length: 73
+  max_length: 73
+  min_entropy: 2.8
+  verifier: null
+  tests:
+    positives:
+      - 'OPENROUTER_API_KEY=[REDACTED]'
+    negatives:
+      - 'OPENROUTER_API_KEY=sk-or-v1-short'
+
+- id: xai-api-key
+  title: xAI API Key
+  type: xai_api_key
+  vendor: xai
+  version: 1
+  license: MIT
+  confidence: 75
+  patterns:
+    - '(?i)xai[_-]?api[_-]?key["'']?\s*[:=]\s*["'']?(?P<secret>xai-[A-Za-z0-9_-]{24,})["'']?'
+  min_length: 28
+  min_entropy: 2.8
+  verifier: null
+  tests:
+    positives:
+      - !synthetic "XAI_API_KEY=xai-{test:alnum:28:18beadbc8d05}"
+    negatives:
+      - 'XAI_API_KEY=xai-short'
+
+- id: authorization-bearer-token
+  title: Authorization Bearer Token
+  type: authorization_bearer_token
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 65
+  patterns:
+    - '(?i)authorization\s*:\s*bearer\s+(?P<secret>[A-Za-z0-9._~-]{24,})'
+  min_length: 24
+  min_entropy: 2.8
+  forbidden_secret_values:
+    - '^(?:example|placeholder|changeme|your[_-]?token|token)$'
+  verifier: null
+  tests:
+    positives:
+      - !synthetic "Authorization: Bearer {test:alnum:28:18beadbc8d05}"
+    negatives:
+      - 'Authorization: Bearer example'
+
+- id: authorization-basic-credential
+  title: Authorization Basic 编码凭据
+  type: authorization_basic_credential
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 70
+  patterns:
+    - '(?i)authorization\s*:\s*basic\s+(?P<secret>[A-Za-z0-9+/]{24,}={0,2})'
+  min_length: 24
+  min_entropy: 2.8
+  verifier: null
+  tests:
+    positives:
+      - !synthetic "Authorization: Basic {test:alnum:34:543df5a6866a}=="
+    negatives:
+      - 'Authorization: Basic c2hvcnQ='
+
+- id: jwt-credential
+  title: JWT 凭据
+  type: jwt_credential
+  vendor: generic
+  version: 1
+  license: MIT
+  confidence: 60
+  patterns:
+    - '(?i)(?:authorization\s*:\s*bearer|jwt[_-]?token|id[_-]?token)\s*[:=]?\s*(?P<secret>eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
+  min_length: 39
+  min_entropy: 2.8
+  verifier: null
+  tests:
+    positives:
+      - !synthetic "JWT_TOKEN=eyJ{test:alnum:17:73bc28b6250f}.{test:alnum:19:62665e2e52c9}.{test:alnum:21:6c534d408c15}"
+    negatives:
+      - 'JWT_TOKEN=eyJ.short'

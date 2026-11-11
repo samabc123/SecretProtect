@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-intro">
+  <div><h2>验证中心</h2><p>只处理明确授权的自有或测试凭据；默认联网关闭，无法判断不会被写成失效。</p></div>
+  <div class="button-row"><button class="button-primary" data-verification-process>处理排队任务</button><button data-verification-refresh>刷新</button></div>
+</div>
+<div class="section-title"><h3>验证边界</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：规范化后端 SQLite</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="panel notice">验证请求不会显示或导出完整秘密。联网开关关闭、指纹不在白名单、缺少成对凭据或没有最小验证器时，系统只记录“无法判断/不支持”，不自动登录、枚举、撤销或修改第三方资源。</div>
+<div class="grid grid-4" data-verification-summary>
+  <div class="panel metric"><div class="label">排队</div><div class="value">-</div><div class="hint">待处理任务</div></div>
+  <div class="panel metric"><div class="label">无法判断</div><div class="value">-</div><div class="hint">不等于失效</div></div>
+  <div class="panel metric"><div class="label">有效</div><div class="value">-</div><div class="hint">仅授权验证结果</div></div>
+  <div class="panel metric"><div class="label">无效</div><div class="value">-</div><div class="hint">仅在验证器有依据时记录</div></div>
+</div>
+<div class="section-title"><h3>验证队列</h3><div class="section-meta"><span class="badge badge-source" data-unified-source>真实数据：SQLite verification_jobs</span><span class="badge badge-status" data-unified-status>部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>任务</th><th>发现项</th><th>类型</th><th>验证器</th><th>请求来源</th><th>状态</th><th>创建时间</th></tr></thead><tbody data-verification-jobs><tr><td colspan="7" class="muted">正在读取验证队列……</td></tr></tbody></table></div>
+<div class="section-title"><h3>验证历史</h3><div class="section-meta"><span class="badge badge-source">真实数据：SQLite verification_results</span><span class="badge badge-status">部分实现</span></div></div>
+<div class="table-wrap"><table><thead><tr><th>发现项</th><th>验证器</th><th>版本</th><th>状态</th><th>延迟</th><th>证据摘要</th><th>时间</th></tr></thead><tbody data-verification-history><tr><td colspan="7" class="muted">正在读取验证历史……</td></tr></tbody></table></div>
+{% endblock %}
