@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="导入实验室名单" width="760px" class="roster-dialog" :close-on-click-modal="false">
+  <el-dialog v-model="visible" title="导入实验室名单" width="760px" class="roster-dialog" align-center :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
     <div class="file-toolbar">
       <el-button :icon="Download" :disabled="busy" @click="download">下载 CSV 模板</el-button>
       <label class="file-picker">名单文件（CSV，最大 1 MiB）
@@ -14,12 +14,18 @@
         <div><dt>重复跳过</dt><dd>{{ preview.summary.skip }}</dd></div>
         <div><dt>无效行</dt><dd>{{ preview.summary.error }}</dd></div>
       </dl>
-      <el-table :data="preview.rows" max-height="360" empty-text="暂无名单">
+      <el-table v-if="!compact" :data="preview.rows" max-height="360" empty-text="暂无名单">
         <el-table-column prop="line" label="行" width="60" />
         <el-table-column prop="email" label="邮箱" min-width="220" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><el-tag :type="row.state === 'error' ? 'danger' : row.state === 'add' ? 'success' : 'info'">{{ states[row.state] }}</el-tag> {{ row.message }}</template></el-table-column>
       </el-table>
+      <ul v-else class="record-list" aria-label="名单导入预览">
+        <li v-for="row in preview.rows" :key="row.line" class="record-item">
+          <div class="record-heading"><div class="record-identity"><strong>第 {{ row.line }} 行 · {{ row.username || '未填写用户名' }}</strong><span>{{ row.email }}</span></div><el-tag :type="row.state === 'error' ? 'danger' : row.state === 'add' ? 'success' : 'info'">{{ states[row.state] }}</el-tag></div>
+          <p class="preview-result">{{ row.message }}</p>
+        </li>
+      </ul>
     </template>
     <template #footer>
       <el-button :disabled="busy" @click="visible = false">取消</el-button>
@@ -32,12 +38,14 @@ import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { Download, Upload } from "@element-plus/icons-vue";
 import { admissionApi as api, admissionError } from "../api/admission";
+import { useCompactLayout } from "../composables/useCompactLayout";
 
 const props = defineProps({ modelValue: Boolean });
 const emit = defineEmits(["update:modelValue", "imported"]);
 const visible = computed({ get: () => props.modelValue, set: value => emit("update:modelValue", value) });
 const preview = ref(null), error = ref(""), busy = ref(false), input = ref(null);
 const states = { add: "新增", skip: "跳过", error: "无效" };
+const compact = useCompactLayout();
 watch(() => props.modelValue, value => { if (value) { preview.value = null; error.value = ""; if (input.value) input.value.value = ""; } });
 async function selectFile(event) {
   preview.value = null; error.value = "";
@@ -80,5 +88,11 @@ async function commit() {
 .import-summary div { display: flex; gap: 10px; align-items: baseline; }
 .import-summary dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .el-alert { margin-bottom: 12px; }
+.preview-result { margin: 12px 0 0; color: var(--muted-strong); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+:deep(.el-table .cell) { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .file-toolbar { align-items: stretch; flex-direction: column; }
+  .file-toolbar .el-button { align-self: flex-start; min-height: 40px; }
+  .import-summary { gap: 12px 20px; }
+}
 </style>
-<style>.roster-dialog { max-width: calc(100vw - 28px); border-radius: 6px; }</style>

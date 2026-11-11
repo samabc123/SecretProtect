@@ -26,7 +26,7 @@
             </div>
           </div>
           <div class="hero-visual" aria-hidden="true">
-            <SecretRadarLogo class="hero-radar-logo" :size="176" :animated="true" variant="dark" />
+            <SecretRadarLogo class="hero-radar-logo" :size="compactHero ? 56 : 176" :animated="true" variant="dark" />
           </div>
         </section>
 
@@ -266,6 +266,7 @@
 </template>
 
 <script setup>
+import { useCompactLayout } from "../composables/useCompactLayout";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import {
@@ -288,6 +289,7 @@ import * as ruleApi from "../api/rules";
 import { downloadJson } from "../utils/format";
 
 const router = useRouter();
+const compactHero = useCompactLayout("(max-width: 760px)");
 const overview = ref({});
 const channelConnectors = ref([]);
 const supportMatrix = ref([]);
@@ -1012,6 +1014,8 @@ onBeforeUnmount(() => {
 .hero-copy {
   position: relative;
   z-index: 1;
+  flex: 1;
+  min-width: 0;
   max-width: 760px;
 }
 
@@ -1065,10 +1069,12 @@ onBeforeUnmount(() => {
   max-width: 680px;
   margin: 0;
   color: #f2f8ff;
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: 32px;
   font-weight: 780;
-  letter-spacing: -.025em;
-  line-height: 1.15;
+  letter-spacing: 0;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .overview-hero p {
@@ -1653,27 +1659,31 @@ onBeforeUnmount(() => {
 
 @media (max-width: 760px) {
   .overview-hero {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 18px;
     min-height: 0;
     padding: 26px 22px;
   }
 
   .overview-hero h2 {
-    font-size: 28px;
+    font-size: 24px;
   }
 
   .hero-copy {
-    max-width: calc(100% - 148px);
+    width: 100%;
+    max-width: 100%;
   }
 
   .hero-visual {
-    flex-basis: 124px;
-    width: 124px;
-    height: 124px;
+    order: -1;
+    flex: 0 0 56px;
+    width: 56px;
+    height: 56px;
   }
 
   .hero-radar-logo {
-    transform: scale(.7);
+    transform: none;
   }
 
   .hero-actions {
@@ -1683,6 +1693,7 @@ onBeforeUnmount(() => {
 
   .hero-actions :deep(.el-button) {
     flex: 1 1 auto;
+    margin-left: 0;
   }
 
   .pipeline-grid,
@@ -1716,7 +1727,7 @@ onBeforeUnmount(() => {
 
   .overview-hero h2 {
     max-width: 100%;
-    font-size: 25px;
+    font-size: 24px;
   }
 
   .overview-hero p {
@@ -1724,24 +1735,16 @@ onBeforeUnmount(() => {
     font-size: 12px;
   }
 
-  .overview-hero {
-    display: block;
-  }
-
   .hero-copy {
     max-width: 100%;
   }
 
   .hero-visual {
-    position: absolute;
-    top: 16px;
-    right: 14px;
-    width: 78px;
-    height: 78px;
+    position: static;
   }
 
   .hero-radar-logo {
-    transform: scale(.44);
+    transform: none;
   }
 
   .hero-actions {

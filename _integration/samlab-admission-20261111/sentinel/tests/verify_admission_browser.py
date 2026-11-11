@@ -17,10 +17,136 @@ sys.path.insert(0, str(ROOT))
 
 from app.auth_store import AuthStore, password_hash
 from app.samlab_admission import SamlabAdmissionStore
+from app.roster_import import commit, preview
 
 
 PASSWORD = "Browser-test-only-2026!"
 OUTPUT = ROOT / ".test-results" / "samlab"
+
+def assert_layout(page, name):
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"{name}: page overflow"
+    clipped = page.locator(".record-identity, .record-fields dd, .preview-result").evaluate_all("""
+        nodes => nodes.filter(node => node.getClientRects().length &&
+          node.scrollWidth > node.clientWidth + 1).map(node => node.className)
+    """)
+    assert not clipped, f"{name}: clipped record fields {clipped}"
+
+
+def assert_dialog_fit(page, dialog):
+    expect(page.locator(".dialog-fade-enter-active, .dialog-fade-leave-active")).to_have_count(0)
+    box = dialog.bounding_box()
+    assert box and box["y"] >= 0 and box["y"] + box["height"] <= page.viewport_size["height"] + 1, f"{page.viewport_size}: {box}"
+    footer = dialog.locator(".el-dialog__footer").bounding_box()
+    assert footer and footer["y"] + footer["height"] <= page.viewport_size["height"], "Dialog footer not reachable"
+
+
+def verify_responsive_layout(page, admission, origin):
+    long_email = "long-address-" + "x" * 46 + "@" + "lab-" + "a" * 40 + "." + "b" * 40 + ".example.edu"
+    rows = [f"layout-{index:02d}@example.edu,布局测试人员{index:02d}" for index in range(44)]
+    rows.append(f"{long_email}," + "长姓名验证" * 20)
+    batch = preview(admission, ("邮箱,用户名\n" + "\n".join(rows) + "\n").encode("utf-8"), "synthetic-layout")
+    assert batch["summary"]["error"] == 0
+    commit(admission, batch["batch_id"], "synthetic-layout")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/admission")
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.locator(".pagination-summary")).to_contain_text("共 45 条")
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(20)
+    page.locator("thead:visible label.el-checkbox").click()
+    expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_enabled()
+    page.get_by_role("button", name="下一页").click()
+    expect(page.locator(".pagination-summary")).to_contain_text("第 2 / 3 页")
+    expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_disabled()
+    page.get_by_role("button", name="上一页").click()
+    page.get_by_role("textbox", name="搜索用户名或邮箱").fill("no-such-person")
+    expect(page.get_by_text("没有匹配的白名单人员", exact=True)).to_be_visible()
+    page.get_by_role("textbox", name="搜索用户名或邮箱").fill("")
+    matrix = [(1440, 1000), (1024, 768), (768, 1024), (390, 844), (320, 568), (844, 390)]
+    for width, height in matrix:
+        page.set_viewport_size({"width": width, "height": height})
+        search = page.get_by_role("textbox", name="搜索用户名或邮箱")
+        search.fill(long_email)
+        expect(page.get_by_text(long_email, exact=True)).to_be_visible()
+        assert_layout(page, f"whitelist {width}x{height}")
+        if width <= 900:
+            expect(page.get_by_role("list", name="白名单人员列表").get_by_role("listitem")).to_have_count(1)
+            expect(page.get_by_text("平台账号编号", exact=True)).to_be_visible()
+            card = page.get_by_role("list", name="白名单人员列表").get_by_role("listitem")
+            card.locator("label.el-checkbox").click()
+            expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_enabled()
+            card.locator("label.el-checkbox").click()
+        page.get_by_role("button", name="删除", exact=True).click()
+        dialog = page.get_by_role("dialog", name="删除白名单人员", exact=True)
+        expect(dialog).to_be_visible()
+        assert_dialog_fit(page, dialog)
+        page.screenshot(path=str(OUTPUT / f"dialog-fit-{width}x{height}.png"))
+        dialog.get_by_role("textbox", name="处理原因").fill("仅验证界面滚动")
+        dialog.locator("label.el-checkbox").click()
+        expect(dialog.get_by_role("button", name="确认删除", exact=True)).to_be_enabled()
+        assert_dialog_fit(page, dialog)
+        dialog.get_by_role("button", name="取消", exact=True).click()
+        expect(dialog).not_to_be_visible()
+        expect(page.locator(".dialog-fade-leave-active")).to_have_count(0)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.screenshot(path=str(OUTPUT / f"layout-{width}x{height}.png"), full_page=True)
+        if width <= 760:
+            page.get_by_role("button", name="打开导航", exact=True).click()
+            drawer = page.get_by_role("dialog", name="功能导航", exact=True)
+            expect(drawer.get_by_role("menuitem", name="运行审计", exact=True)).to_be_visible()
+            page.wait_for_function("""() => {
+              const node = document.querySelector('.mobile-navigation');
+              if (!node) return false;
+              const box = node.getBoundingClientRect();
+              return box.x >= -0.5 && box.right <= innerWidth + 0.5;
+            }""")
+            page.screenshot(path=str(OUTPUT / f"navigation-{width}x{height}.png"))
+            drawer.get_by_role("menuitem", name="管理员", exact=True).click()
+            expect(drawer).not_to_be_visible()
+            expect(page.get_by_role("heading", name="管理员", exact=True, level=2)).to_be_visible()
+            assert_layout(page, f"admins {width}x{height}")
+            page.goto(origin + "/admission")
+            page.get_by_role("tab", name="白名单", exact=True).click()
+    # Short desktop navigation must scroll to its final item.
+    page.set_viewport_size({"width": 1024, "height": 600})
+    last_item = page.locator(".app-sidebar").get_by_role("menuitem", name="运行审计", exact=True)
+    last_item.scroll_into_view_if_needed()
+    menu_box, item_box = page.locator(".app-sidebar .app-menu").bounding_box(), last_item.bounding_box()
+    assert item_box["y"] >= menu_box["y"] and item_box["y"] + item_box["height"] <= menu_box["y"] + menu_box["height"] + 1
+    # Verify common shell changes against existing views without triggering collection.
+    for path in ("/", "/monitoring-tasks", "/events", "/findings", "/verification",
+                 "/channels", "/reports", "/settings", "/connector-runs"):
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(origin + path)
+        expect(page.locator(".app-header")).to_be_visible()
+        expect(page.locator(".loading-state").first).not_to_be_visible(timeout=15000)
+        assert_layout(page, path)
+        if path == "/":
+            expect(page.locator(".hero-copy")).to_be_visible()
+            assert page.locator(".hero-copy").evaluate("node => node.scrollWidth <= node.clientWidth + 1")
+            assert page.locator("#overview-title").evaluate("node => node.scrollWidth <= node.clientWidth + 1")
+            title, logo = page.locator("#overview-title").bounding_box(), page.locator(".hero-visual").bounding_box()
+            assert logo["y"] + logo["height"] <= title["y"], "Overview logo overlaps mobile title"
+        if path == "/settings":
+            expect(page.locator(".settings-tabs")).to_have_class("el-tabs el-tabs--top settings-tabs")
+            assert page.locator(".settings-tabs .el-tabs__item").evaluate_all(
+                "nodes => nodes.every(node => node.getBoundingClientRect().width >= 120 && node.getBoundingClientRect().height <= 90)"
+            ), "Settings tabs squeezed into vertical text"
+            audit_tab = page.get_by_role("tab", name="安全审计", exact=False)
+            for _ in range(8):
+                bounds = audit_tab.bounding_box()
+                if bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390:
+                    break
+                page.locator(".settings-tabs .el-tabs__nav-next").click()
+            audit_tab.click()
+            expect(audit_tab).to_have_attribute("aria-selected", "true")
+            account_tab = page.get_by_role("tab", name="个人账号", exact=False)
+            for _ in range(8):
+                bounds = account_tab.bounding_box()
+                if bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390:
+                    break
+                page.locator(".settings-tabs .el-tabs__nav-prev").click()
+            account_tab.click()
+        page.screenshot(path=str(OUTPUT / f"route-{path.strip('/') or 'overview'}-mobile.png"))
 
 
 def main():
@@ -71,7 +197,7 @@ def main():
                     raise RuntimeError("Isolated server startup timeout.")
                 with sync_playwright() as p:
                     browser = p.chromium.launch(channel="msedge", headless=True)
-                    context = browser.new_context(viewport={"width": 1440, "height": 1000})
+                    context = browser.new_context(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.goto(origin + "/login")
@@ -104,11 +230,14 @@ def main():
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
                     page.screenshot(path=str(OUTPUT / "roster-import-desktop.png"), full_page=True)
                     page.set_viewport_size({"width": 390, "height": 844})
+                    expect(import_dialog.get_by_text("新增", exact=True)).to_be_visible()
+                    expect(import_dialog.get_by_text("跳过", exact=True)).to_be_visible()
+                    assert_dialog_fit(page, import_dialog)
                     page.screenshot(path=str(OUTPUT / "roster-import-mobile.png"), full_page=True)
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Import dialog mobile overflow"
                     import_dialog.get_by_role("button", name="确认导入", exact=True).click()
                     expect(import_dialog).not_to_be_visible()
-                    expect(page.get_by_role("row").filter(has_text="roster-browser@example.edu")).to_be_visible()
+                    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("roster-browser@example.edu", exact=True)).to_be_visible()
                     expect(page.get_by_text("待注册或确认申请", exact=True)).to_be_visible()
                     results.append("CSV template download, invalid-row rejection, duplicate preview and actual import; desktop/mobile fit; no fake account opening")
                     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -127,6 +256,7 @@ def main():
                     expect(page.get_by_text("永久有效", exact=True)).to_have_count(2)
                     expect(page.get_by_text("待平台开通", exact=True)).to_be_visible()
                     expect(page.get_by_text("平台已回执开通", exact=True)).to_have_count(0)
+                    expect(page.locator(".el-message")).to_have_count(0)
                     page.screenshot(path=str(OUTPUT / "whitelist-desktop.png"), full_page=True)
                     page.set_viewport_size({"width": 390, "height": 844})
                     page.screenshot(path=str(OUTPUT / "whitelist-mobile.png"), full_page=True)
@@ -187,6 +317,8 @@ def main():
                     page.screenshot(path=str(OUTPUT / "admins-mobile.png"), full_page=True)
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Admin mobile page overflow"
                     results.append("superadmin creates ordinary admin; password cleared; desktop/mobile fit")
+                    verify_responsive_layout(page, admission, origin)
+                    results.append("45 synthetic members: pagination, page-selection reset, empty search, long names/emails, desktop/tablet/mobile/landscape, dialog footer, drawer and all existing route widths")
                     regular_context = browser.new_context()
                     regular = regular_context.new_page()
                     regular.on("pageerror", lambda error: errors.append(str(error)))
@@ -210,8 +342,13 @@ def main():
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
-    print(json.dumps({"workflows": results, "page_errors": errors, "screenshots": str(OUTPUT),
-                      "synthetic_only": True, "real_samlab_integrated": False}, ensure_ascii=False, indent=2))
+    report = {"run_completed": True, "workflows": results, "page_errors": errors, "screenshots": str(OUTPUT),
+              "browser": "Microsoft Edge / Chromium, emulated viewport sizes",
+              "layout_viewports": ["1440x1000", "1024x768", "768x1024", "390x844", "320x568", "844x390"],
+              "synthetic_only": True, "real_samlab_integrated": False, "production_changed": False}
+    rendered = json.dumps(report, ensure_ascii=False, indent=2)
+    (OUTPUT / "browser-results.json").write_text(rendered, encoding="utf-8")
+    print(rendered)
 
 
 if __name__ == "__main__":

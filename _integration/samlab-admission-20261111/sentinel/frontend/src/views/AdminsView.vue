@@ -11,15 +11,23 @@
           <el-form-item><el-button type="primary" native-type="submit" :icon="Plus" :loading="saving">创建管理员</el-button></el-form-item>
         </el-form>
       </section>
-      <el-table :data="items" empty-text="暂无管理员">
+      <el-table v-if="!compact" :data="items" empty-text="暂无管理员">
         <el-table-column prop="username" label="用户名" min-width="150" />
         <el-table-column label="权限" min-width="140"><template #default="{ row }">{{ row.is_superadmin ? "超级管理员" : "管理员" }}</template></el-table-column>
         <el-table-column label="账号状态" min-width="130"><template #default="{ row }"><el-tag :type="row.is_active ? 'success' : 'danger'">{{ row.is_active ? "启用" : "停用" }}</el-tag></template></el-table-column>
         <el-table-column label="密码状态" min-width="150"><template #default="{ row }">{{ row.needs_password_change ? "首次登录待修改" : "已设置" }}</template></el-table-column>
-        <el-table-column label="操作" width="125" fixed="right"><template #default="{ row }">
+        <el-table-column label="操作" width="125"><template #default="{ row }">
           <el-button v-if="!row.is_superadmin" :icon="row.is_active ? CircleClose : CircleCheck" text :type="row.is_active ? 'danger' : 'primary'" :disabled="saving" @click="setStatus(row)">{{ row.is_active ? "停用" : "启用" }}</el-button>
         </template></el-table-column>
       </el-table>
+      <ul v-else class="record-list" aria-label="管理员列表">
+        <li v-for="row in items" :key="row.id" class="record-item">
+          <div class="record-heading"><div class="record-identity"><strong>{{ row.username }}</strong><span>{{ row.is_superadmin ? '超级管理员' : '管理员' }}</span></div><el-tag :type="row.is_active ? 'success' : 'danger'">{{ row.is_active ? '启用' : '停用' }}</el-tag></div>
+          <dl class="record-fields"><div class="record-field-wide"><dt>密码状态</dt><dd>{{ row.needs_password_change ? '首次登录待修改' : '已设置' }}</dd></div></dl>
+          <div v-if="!row.is_superadmin" class="record-actions"><el-button :icon="row.is_active ? CircleClose : CircleCheck" plain :type="row.is_active ? 'danger' : 'primary'" :disabled="saving" @click="setStatus(row)">{{ row.is_active ? '停用' : '启用' }}</el-button></div>
+        </li>
+      </ul>
+      <div v-if="compact && !items.length" class="record-empty">暂无管理员</div>
     </main>
   </AppLayout>
 </template>
@@ -30,7 +38,9 @@ import { CircleCheck, CircleClose, Plus, Refresh } from "@element-plus/icons-vue
 import AppLayout from "../components/AppLayout.vue";
 import { createAdmin, listAdmins, setAdminStatus } from "../api/auth";
 import { admissionError, admissionFieldErrors } from "../api/admission";
+import { useCompactLayout } from "../composables/useCompactLayout";
 
+const compact = useCompactLayout();
 const items = ref([]), loading = ref(false), saving = ref(false), error = ref(""), fieldErrors = ref({});
 const form = reactive({ username: "", password: "" });
 async function load() {
@@ -66,6 +76,7 @@ onMounted(load);
 <style scoped>
 .admins-page { min-width: 0; letter-spacing: 0; }
 .admins-page :deep(.el-table) { min-width: 0; }
+.admins-page :deep(.el-table .cell) { overflow-wrap: anywhere; }
 .admins-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
 .admins-header h2 { margin: 0; font-size: 23px; }
 .admin-create { padding: 18px 0; margin: 0 0 22px; border-block: 1px solid var(--line); }

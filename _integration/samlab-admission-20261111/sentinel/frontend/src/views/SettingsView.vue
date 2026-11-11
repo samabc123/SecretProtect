@@ -9,7 +9,7 @@
       <el-button @click="load">重新读取</el-button>
     </PageHeader>
 
-    <el-tabs v-model="activeTab" tab-position="left" class="settings-tabs">
+    <el-tabs v-model="activeTab" :tab-position="compactSettings ? 'top' : 'left'" class="settings-tabs">
       <el-tab-pane v-for="item in settingsTabs" :key="item[0]" :name="item[0]" :label="item[1]">
         <template #label>
           <div class="tab-label">
@@ -202,6 +202,8 @@
 </template>
 
 <script setup>
+import { useCompactLayout } from "../composables/useCompactLayout";
+const compactSettings = useCompactLayout("(max-width: 1100px)");
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { UserFilled } from "@element-plus/icons-vue";

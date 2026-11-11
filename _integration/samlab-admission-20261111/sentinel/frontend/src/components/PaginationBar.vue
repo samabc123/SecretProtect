@@ -8,9 +8,10 @@
       :page-size="pageSize"
       :page-sizes="pageSizes"
       :total="total"
+      :pager-count="5"
       size="small"
       background
-      layout="total, sizes, first, prev, pager, next, last, jumper"
+      layout="sizes, first, prev, pager, next, last, jumper"
       @current-change="$emit('update:page', $event)"
       @size-change="$emit('update:pageSize', $event)"
     />
