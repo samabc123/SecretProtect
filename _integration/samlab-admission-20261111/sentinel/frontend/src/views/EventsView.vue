@@ -1,21 +1,23 @@
 <template>
   <AppLayout>
     <PageHeader title="事件列表" description="按渠道、凭据类型、风险和处置状态筛选事件。">
-      <el-button @click="batchConfirm">批量确认</el-button>
-      <el-button @click="exportSelected">导出事件</el-button>
+      <el-button :icon="Check" :disabled="!selected.length" @click="batchConfirm">批量确认</el-button>
+      <el-button :icon="Download" @click="exportSelected">导出事件</el-button>
     </PageHeader>
-    <el-card shadow="never" class="filter-card">
+    <MetricGrid :items="summaryItems" />
+    <div class="workspace-filter">
       <el-form :model="filters" inline class="filter-toolbar" @submit.prevent="applyFilters">
+        <el-form-item label="数据来源"><el-select v-model="filters.source_kind" aria-label="事件数据来源"><el-option label="全部来源" value="全部来源" /><el-option v-for="item in filterOptions.source_kind" :key="item" :label="item" :value="item" /></el-select></el-form-item>
         <el-form-item label="渠道"><el-select v-model="filters.channel" clearable placeholder="全部渠道"><el-option v-for="item in filterOptions.channel" :key="item" :label="item" :value="item" /></el-select></el-form-item>
         <el-form-item label="凭据类型"><el-select v-model="filters.credential_type" clearable placeholder="全部类型"><el-option v-for="item in filterOptions.credential_type" :key="item" :label="item" :value="item" /></el-select></el-form-item>
         <el-form-item label="风险"><el-select v-model="filters.risk_level" clearable placeholder="全部风险"><el-option v-for="item in filterOptions.risk_level" :key="item" :label="displayState(item, 'risk')" :value="item" /></el-select></el-form-item>
         <el-form-item label="处置"><el-select v-model="filters.disposition" clearable placeholder="全部处置"><el-option v-for="item in filterOptions.disposition" :key="item" :label="displayState(item)" :value="item" /></el-select></el-form-item>
         <el-form-item><el-button type="primary" native-type="submit">应用筛选</el-button><el-button @click="resetFilters">重置</el-button></el-form-item>
       </el-form>
-    </el-card>
-    <MetricGrid :items="summaryItems" />
-    <el-card shadow="never">
-      <el-table v-loading="loading" :data="items" class="event-table" @selection-change="selected = $event">
+    </div>
+    <section class="event-results" aria-label="事件检索结果">
+      <div class="results-heading"><h3>事件记录</h3><span>已选择 {{ selected.length }} 条</span></div>
+      <el-table v-loading="loading" :data="items" class="event-table management-table" @selection-change="selected = $event">
         <el-table-column type="selection" width="48" />
         <el-table-column prop="event_id" label="事件" min-width="180"><template #default="{ row }"><router-link :to="`/events/${row.event_id}`">{{ row.event_id }}</router-link><div class="muted">{{ row.source_kind }}</div></template></el-table-column>
         <el-table-column label="来源" min-width="150"><template #default="{ row }">{{ row.channel }}<div class="muted">{{ row.platform }}</div></template></el-table-column>
@@ -43,13 +45,14 @@
         @update:page="onPage"
         @update:page-size="onPageSize"
       />
-    </el-card>
+    </section>
   </AppLayout>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { Check, Download } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import AppLayout from "../components/AppLayout.vue";
 import PageHeader from "../components/PageHeader.vue";
@@ -75,11 +78,11 @@ const filters = reactive({
   credential_type: String(route.query.credential_type || ""),
   risk_level: String(route.query.risk_level || ""),
   disposition: String(route.query.disposition || ""),
-  source_kind: String(route.query.source_kind || ""),
+  source_kind: String(route.query.source_kind || "真实检测结果"),
   sort_by: String(route.query.sort_by || "event_id"),
   sort_order: String(route.query.sort_order || "asc"),
 });
-const filterOptions = reactive({ channel: [], credential_type: [], risk_level: [], disposition: [] });
+const filterOptions = reactive({ source_kind: [], channel: [], credential_type: [], risk_level: [], disposition: [] });
 const summary = ref({});
 const summaryItems = computed(() => [
   { label: "候选数", value: summary.value.candidate_count, hint: "当前事件记录口径" },
@@ -111,7 +114,7 @@ async function load() {
   }
 }
 function resetFilters() {
-  Object.assign(filters, { channel: "", credential_type: "", risk_level: "", disposition: "", source_kind: "" });
+  Object.assign(filters, { channel: "", credential_type: "", risk_level: "", disposition: "", source_kind: "真实检测结果" });
   applyFilters();
 }
 async function applyFilters() {
@@ -155,4 +158,8 @@ onMounted(load);
   min-width: 0;
   align-items: center;
 }
+.event-results { min-width: 0; }
+.results-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.results-heading h3 { margin: 0; font-size: 14px; }
+.results-heading span { color: var(--muted-strong); font-size: 12px; }
 </style>

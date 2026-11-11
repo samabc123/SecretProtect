@@ -9,6 +9,7 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -18,12 +19,20 @@ sys.path.insert(0, str(ROOT))
 from app.auth_store import AuthStore, password_hash
 from app.samlab_admission import SamlabAdmissionStore
 from app.roster_import import commit, preview
+from app.monitoring_store import MonitoringStore
+from app.event_store import EventStore
 
 
 PASSWORD = "Browser-test-only-2026!"
 OUTPUT = ROOT / ".test-results" / "samlab"
 
+def choose_filter(page, name, option):
+    page.locator(".el-select").filter(has=page.get_by_role("combobox", name=name, exact=True)).click()
+    page.get_by_role("option", name=option, exact=True).click()
+    expect(page.locator(".el-select-dropdown:visible")).to_have_count(0)
+
 def assert_layout(page, name):
+    page.wait_for_function("document.documentElement.scrollWidth <= innerWidth", timeout=5000)
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"{name}: page overflow"
     clipped = page.locator(".record-identity, .record-fields dd, .preview-result").evaluate_all("""
         nodes => nodes.filter(node => node.getClientRects().length &&
@@ -121,11 +130,10 @@ def verify_responsive_layout(page, admission, origin):
         expect(page.locator(".loading-state").first).not_to_be_visible(timeout=15000)
         assert_layout(page, path)
         if path == "/":
-            expect(page.locator(".hero-copy")).to_be_visible()
-            assert page.locator(".hero-copy").evaluate("node => node.scrollWidth <= node.clientWidth + 1")
+            expect(page.get_by_role("heading", name="安全工作台", exact=True)).to_be_visible()
+            expect(page.get_by_role("heading", name="近期事件", exact=True)).to_be_visible()
+            expect(page.get_by_text("历史与测试来源不等同于生产平台实测", exact=True)).to_be_visible()
             assert page.locator("#overview-title").evaluate("node => node.scrollWidth <= node.clientWidth + 1")
-            title, logo = page.locator("#overview-title").bounding_box(), page.locator(".hero-visual").bounding_box()
-            assert logo["y"] + logo["height"] <= title["y"], "Overview logo overlaps mobile title"
         if path == "/settings":
             expect(page.locator(".settings-tabs")).to_have_class("el-tabs el-tabs--top settings-tabs")
             assert page.locator(".settings-tabs .el-tabs__item").evaluate_all(
@@ -148,6 +156,46 @@ def verify_responsive_layout(page, admission, origin):
             account_tab.click()
         page.screenshot(path=str(OUTPUT / f"route-{path.strip('/') or 'overview'}-mobile.png"))
 
+def verify_security_workspace(page, origin):
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/monitoring-tasks")
+    explorer = page.get_by_role("complementary", name="检测目标列表")
+    expect(explorer).to_be_visible()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(3)
+    explorer.get_by_role("button").filter(has_text="https://ui-fixture.example.invalid/site-a").click()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(2)
+    expect(page.locator(".pagination-summary")).to_contain_text("共 2 条")
+    page.screenshot(path=str(OUTPUT / "scan-workspace-desktop.png"), full_page=True)
+    page.locator(".el-table__body-wrapper:visible tbody tr").first.get_by_role("button", name="详情", exact=True).click()
+    detail = page.get_by_role("dialog", name="监控任务详情", exact=True)
+    expect(detail.get_by_text("https://ui-fixture.example.invalid/site-a", exact=True)).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(detail).not_to_be_visible()
+    task_row = page.locator(".el-table__body-wrapper:visible tbody tr").first
+    task_row.get_by_role("button", name="更多操作", exact=True).click()
+    page.get_by_role("menuitem", name="修改", exact=True).click()
+    edit_dialog = page.get_by_role("dialog", name="修改监控任务", exact=True)
+    expect(edit_dialog).to_be_visible()
+    edit_dialog.get_by_role("button", name="取消", exact=True).click()
+    expect(edit_dialog).not_to_be_visible()
+    task_row.get_by_role("button", name="更多操作", exact=True).click()
+    page.get_by_role("menuitem", name="暂停", exact=True).click()
+    expect(task_row.get_by_text("已暂停", exact=True)).to_be_visible()
+    explorer.get_by_role("button").filter(has_text="全部目标").click()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(3)
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert_layout(page, "scan workspace mobile")
+    page.screenshot(path=str(OUTPUT / "scan-workspace-mobile.png"), full_page=True)
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/")
+    expect(page.get_by_role("heading", name="安全工作台", exact=True)).to_be_visible()
+    expect(page.locator(".console-section .el-table__body-wrapper tbody tr")).to_have_count(3)
+    expect(page.locator(".console-section").get_by_text("合成样例", exact=False)).to_have_count(3)
+    page.screenshot(path=str(OUTPUT / "security-console-desktop.png"), full_page=True)
+    page.goto(origin + "/events?source_kind=" + quote("合成样例"))
+    expect(page.locator(".event-table .el-table__body-wrapper tbody tr")).to_have_count(3)
+    page.screenshot(path=str(OUTPUT / "security-events-desktop.png"), full_page=True)
+
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -167,6 +215,22 @@ def main():
         admission.initialize()
         admission.submit("synthetic-request-01", "student01", "2026012345", "student01@example.edu")
         admission.submit("synthetic-request-02", "student02", "2026012346", "student02@example.edu")
+        monitoring = MonitoringStore(temp / "monitoring.sqlite3")
+        for index, target in enumerate(["site-a", "site-a", "site-b"]):
+            monitoring.create_task({
+                "task_id": f"synthetic-task-{index}", "task_name": f"合成界面任务 {index}",
+                "channel": "controlled_test", "platform": "合成测试载体",
+                "monitor_object": f"https://ui-fixture.example.invalid/{target}",
+                "collection_method": "controlled_fixtures", "schedule": "手动",
+            })
+        event_store = EventStore(temp / "events.sqlite3")
+        event_store.import_synthetic([{
+            "event_id": f"synthetic-ui-event-{index}", "source_kind": "合成样例",
+            "channel": "controlled_test", "platform": "合成测试载体",
+            "credential_type": "synthetic_token", "redacted_value": "synthetic_****_only",
+            "evidence_level": "L0", "risk_level": risk, "disposition": "待确认",
+            "first_observed_at": "2026-11-11T12:00:00Z", "detected_at": "2026-11-11T12:00:00Z",
+        } for index, risk in enumerate(["high", "medium", "low"])])
         with socket.socket() as bound:
             bound.bind(("127.0.0.1", 0))
             port = bound.getsockname()[1]
@@ -209,6 +273,18 @@ def main():
                     page.get_by_role("button", name="登录", exact=True).click()
                     expect(page.get_by_role("heading", name="Samlab 人员准入")).to_be_visible()
                     expect(page.get_by_text("student01@example.edu", exact=True)).to_be_visible()
+                    page.get_by_role("button", name="收起侧栏", exact=True).click()
+                    expect(page.locator(".app-sidebar")).to_have_class("el-aside app-sidebar is-collapsed")
+                    page.reload()
+                    expect(page.get_by_role("button", name="展开侧栏", exact=True)).to_be_visible()
+                    expect(page.get_by_role("heading", name="Samlab 人员准入")).to_be_visible()
+                    page.screenshot(path=str(OUTPUT / "sidebar-collapsed.png"))
+                    page.get_by_role("button", name="展开侧栏", exact=True).click()
+                    choose_filter(page, "审批状态", "已同意")
+                    expect(page.get_by_text("没有匹配的注册申请", exact=True)).to_be_visible()
+                    choose_filter(page, "审批状态", "全部审批状态")
+                    expect(page.get_by_text("student01@example.edu", exact=True)).to_be_visible()
+                    results.append("sidebar collapse persists on reload; approval-state filter uses actual records")
                     page.screenshot(path=str(OUTPUT / "requests-desktop.png"), full_page=True)
                     results.append("admin login; no public signup or application entry")
                     expect(page.get_by_role("columnheader", name="学号", exact=True)).to_have_count(0)
@@ -273,6 +349,11 @@ def main():
                     roster_row.locator("label.el-checkbox").click()
                     expect(roster_row.get_by_role("checkbox")).to_be_checked()
                     expect(batch_button).to_be_enabled()
+                    choose_filter(page, "人员来源", "文件导入")
+                    expect(batch_button).to_be_disabled()
+                    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("student01@example.edu", exact=True)).to_have_count(0)
+                    expect(roster_row).to_be_visible()
+                    choose_filter(page, "人员来源", "全部来源")
                     page.get_by_role("textbox", name="搜索用户名或邮箱").fill("student01")
                     expect(batch_button).to_be_disabled()
                     page.get_by_role("textbox", name="搜索用户名或邮箱").fill("")
@@ -307,16 +388,53 @@ def main():
                     results.append("rejection without free-text note")
                     page.goto(origin + "/administrators")
                     expect(page.get_by_role("heading", name="管理员", exact=True, level=2)).to_be_visible()
-                    page.get_by_role("textbox", name="新管理员用户名").fill("createdbyui")
-                    page.get_by_label("新管理员初始密码", exact=True).fill(PASSWORD)
                     page.get_by_role("button", name="创建管理员", exact=True).click()
+                    create_dialog = page.get_by_role("dialog", name="创建管理员", exact=True)
+                    create_dialog.get_by_role("textbox", name="新管理员用户名").fill("x")
+                    create_dialog.get_by_label("新管理员初始密码", exact=True).fill("short")
+                    create_dialog.get_by_role("button", name="创建管理员", exact=True).click()
+                    expect(create_dialog.get_by_text("请输入 3—32 位合法用户名。", exact=True)).to_be_visible()
+                    expect(create_dialog.get_by_text("初始密码须为 6—128 位。", exact=True)).to_be_visible()
+                    create_dialog.get_by_role("button", name="取消", exact=True).click()
+                    expect(create_dialog).not_to_be_visible()
+                    expect(page.locator(".dialog-fade-leave-active")).to_have_count(0)
+                    page.get_by_role("button", name="创建管理员", exact=True).click()
+                    expect(create_dialog.get_by_label("新管理员初始密码", exact=True)).to_have_value("")
+                    create_dialog.get_by_role("textbox", name="新管理员用户名").fill("createdbyui")
+                    create_dialog.get_by_label("新管理员初始密码", exact=True).fill(PASSWORD)
+                    create_dialog.get_by_role("button", name="创建管理员", exact=True).click()
+                    expect(create_dialog).not_to_be_visible()
                     expect(page.get_by_role("row").filter(has_text="createdbyui")).to_be_visible()
-                    expect(page.get_by_label("新管理员初始密码", exact=True)).to_have_value("")
+                    page.get_by_role("textbox", name="搜索管理员").fill("createdbyui")
+                    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(1)
+                    page.get_by_role("textbox", name="搜索管理员").fill("")
+                    created_row = page.get_by_role("row").filter(has_text="createdbyui")
+                    created_row.get_by_role("button", name="停用", exact=True).click()
+                    page.get_by_role("button", name="确认", exact=True).click()
+                    expect(created_row.get_by_text("停用", exact=True)).to_be_visible()
+                    choose_filter(page, "管理员状态", "停用")
+                    expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(1)
+                    created_row.get_by_role("button", name="启用", exact=True).click()
+                    page.get_by_role("button", name="确认", exact=True).click()
+                    expect(page.get_by_text("没有匹配的管理员", exact=True)).to_be_visible()
+                    choose_filter(page, "管理员状态", "全部状态")
+                    expect(created_row).to_be_visible()
+                    expect(created_row.locator(".el-tag").get_by_text("启用", exact=True)).to_be_visible()
+                    expect(page.get_by_role("row").filter(has_text="受保护").locator(".el-tag").get_by_text("超级管理员", exact=True)).to_be_visible()
+                    expect(page.locator(".el-message")).to_have_count(0)
                     page.screenshot(path=str(OUTPUT / "admins-desktop.png"), full_page=True)
                     page.set_viewport_size({"width": 390, "height": 844})
                     page.screenshot(path=str(OUTPUT / "admins-mobile.png"), full_page=True)
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Admin mobile page overflow"
-                    results.append("superadmin creates ordinary admin; password cleared; desktop/mobile fit")
+                    page.get_by_role("button", name="创建管理员", exact=True).click()
+                    expect(create_dialog.get_by_label("新管理员初始密码", exact=True)).to_have_value("")
+                    assert_dialog_fit(page, create_dialog)
+                    page.screenshot(path=str(OUTPUT / "create-admin-mobile.png"))
+                    create_dialog.get_by_role("button", name="取消", exact=True).click()
+                    expect(create_dialog).not_to_be_visible()
+                    results.append("admin modal validates fields, clears password on cancel/success, creates ordinary admin; search and desktop/mobile fit")
+                    verify_security_workspace(page, origin)
+                    results.append("security console shows persisted synthetic events with provenance; target explorer filters tasks and opens details; no scan triggered")
                     verify_responsive_layout(page, admission, origin)
                     results.append("45 synthetic members: pagination, page-selection reset, empty search, long names/emails, desktop/tablet/mobile/landscape, dialog footer, drawer and all existing route widths")
                     regular_context = browser.new_context()

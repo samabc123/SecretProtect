@@ -4,58 +4,54 @@
       <LoadingState :loading="loading" :error="error" @retry="load" />
 
       <template v-if="!loading && !error">
-        <section class="overview-hero" aria-labelledby="overview-title">
-          <div class="hero-copy">
-            <div class="hero-meta">
-              <span class="hero-kicker">Security operations / evidence desk</span>
-              <span class="hero-status"><i />授权范围内运行</span>
-            </div>
-            <h2 id="overview-title">云上凭据泄露自动化检测平台</h2>
-            <p>
-              把采集来源、检测候选、统一凭据实体和处置队列放在同一条证据链上，
-              让当前覆盖范围、风险状态和下一步动作可以快速核对。
-            </p>
-            <div class="hero-actions">
+        <header class="management-heading" aria-labelledby="overview-title">
+          <div>
+            <h2 id="overview-title">安全工作台</h2>
+            <p class="management-subtitle">Samlab 实验室</p>
+          </div>
+            <div class="page-actions">
               <el-button type="primary" :loading="running" :icon="VideoPlay" @click="collect">
-                立即采集
+                检查到期任务
               </el-button>
               <el-button :icon="Download" @click="exportData">导出报告</el-button>
               <el-button text type="primary" :icon="ArrowRight" @click="router.push('/events')">
                 查看事件列表
               </el-button>
             </div>
-          </div>
-          <div class="hero-visual" aria-hidden="true">
-            <SecretRadarLogo class="hero-radar-logo" :size="compactHero ? 56 : 176" :animated="true" variant="dark" />
-          </div>
-        </section>
+        </header>
 
-        <section class="pipeline-grid" aria-label="检测链路">
-          <article v-for="stage in pipeline" :key="stage.title" class="pipeline-stage">
-            <div class="stage-topline">
-              <span class="stage-index">{{ stage.index }}</span>
-              <el-icon class="stage-icon" :style="{ color: stage.color }"><component :is="stage.icon" /></el-icon>
-            </div>
-            <h3>{{ stage.title }}</h3>
-            <p>{{ stage.description }}</p>
-            <strong>{{ stage.stat }}</strong>
-          </article>
+        <div class="workspace-context"><el-icon><DataAnalysis /></el-icon><strong>当前数据库</strong><span>历史与测试来源不等同于生产平台实测</span></div>
+        <dl class="security-summary">
+          <div><dt>已记录事件</dt><dd>{{ eventsAvailable ? recentEvents.length : '—' }}</dd></div>
+          <div class="security-summary-warning"><dt>待验证凭证</dt><dd>{{ pendingVerificationCount }}</dd></div>
+          <div><dt>去重凭证实体</dt><dd>{{ allCredentialsTotal }}</dd></div>
+          <div><dt>检测规则</dt><dd>{{ ruleCredentialCount }}</dd></div>
+        </dl>
+
+        <section class="console-section" aria-labelledby="recent-events-heading">
+          <header class="console-section-heading"><h3 id="recent-events-heading">近期事件</h3><el-button link type="primary" :icon="ArrowRight" @click="router.push('/events')">全部事件</el-button></header>
+          <el-table :data="recentEvents.slice(0, 6)" class="management-table" :empty-text="eventsAvailable ? '当前数据库暂无事件' : '事件数据读取失败，请刷新重试'">
+            <el-table-column label="事件 / 来源" min-width="210"><template #default="{ row }"><div class="record-identity"><router-link :to="`/events/${row.event_id}`">{{ row.event_id }}</router-link><span>{{ row.platform || row.channel }} · {{ row.source_kind || '来源未标记' }}</span></div></template></el-table-column>
+            <el-table-column prop="credential_type" label="凭证类型" min-width="150" />
+            <el-table-column label="风险" width="100"><template #default="{ row }"><StateTag :value="row.risk_level" kind="risk" /></template></el-table-column>
+            <el-table-column label="处置" min-width="125"><template #default="{ row }"><StateTag :value="row.disposition" /></template></el-table-column>
+            <el-table-column label="检测时间" min-width="175"><template #default="{ row }">{{ formatTimestamp(row.detected_at, '未记录') }}</template></el-table-column>
+          </el-table>
         </section>
 
         <div class="overview-grid detail-grid">
-          <el-card shadow="never" class="overview-panel">
-            <template #header>
+          <section class="overview-panel">
+            <header>
               <div class="panel-heading">
                 <div>
-                  <span class="panel-kicker">Coverage</span>
-                  <h3>渠道覆盖</h3>
+                  <h3>采集能力目录</h3>
                 </div>
-                <span class="panel-summary">{{ channelTypeCount }} 种 / {{ channelPlatformCount }} 平台</span>
+                <span class="panel-summary">{{ channelTypeCount }} 种来源 / {{ channelPlatformCount }} 个平台适配</span>
                 <el-button link type="primary" :icon="ArrowRight" @click="router.push('/channels')">
                   查看矩阵
                 </el-button>
               </div>
-            </template>
+            </header>
             <div v-if="channelBars.length" class="coverage-list">
               <div v-for="item in channelBars" :key="item.channel" class="coverage-row">
                 <div class="coverage-label">
@@ -81,20 +77,19 @@
                 {{ channelLabel(item.channel) }} · {{ item.platform }} · {{ item.count }}
               </el-tag>
             </div>
-          </el-card>
+          </section>
 
-          <el-card shadow="never" class="overview-panel type-panel">
-            <template #header>
+          <section class="overview-panel type-panel">
+            <header>
               <div class="panel-heading">
                 <div>
-                  <span class="panel-kicker">CREDENTIAL TYPES</span>
                   <h3>凭据类型</h3>
                 </div>
                 <span class="panel-summary">
                   {{ credentialTypeTotal }} 种类型 · {{ allCredentialsTotal }} 个去重凭据实体
                 </span>
               </div>
-            </template>
+            </header>
             <div v-if="credentialDonutSegments.length" class="type-distribution">
               <div
                 class="type-donut-wrap"
@@ -150,15 +145,14 @@
               </div>
             </div>
             <el-empty v-else description="当前没有凭据类型数据" />
-          </el-card>
+          </section>
         </div>
 
         <section class="analysis-stack" aria-label="趋势分析">
-          <el-card shadow="never" class="overview-panel trend-panel">
-            <template #header>
+          <section class="overview-panel trend-panel">
+            <header>
               <div class="panel-heading trend-heading">
                 <div>
-                  <span class="panel-kicker">Recent activity</span>
                   <h3>近期泄露事件趋势</h3>
                 </div>
                 <div class="trend-legend">
@@ -167,7 +161,7 @@
                   <span><i class="trend-dot trend-dot--confirmed" />已确认事件</span>
                 </div>
               </div>
-            </template>
+            </header>
             <div v-if="trendPoints.length" class="trend-chart-wrap">
               <div class="trend-y-axis" aria-hidden="true">
                 <span v-for="tick in trendTicks" :key="tick">{{ tick }}</span>
@@ -258,7 +252,7 @@
               </svg>
             </div>
             <el-empty v-else description="当前没有足够的真实事件趋势数据" />
-          </el-card>
+          </section>
         </section>
       </template>
     </div>
@@ -266,30 +260,25 @@
 </template>
 
 <script setup>
-import { useCompactLayout } from "../composables/useCompactLayout";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import {
   ArrowRight,
-  Bell,
-  Connection,
   DataAnalysis,
   Download,
-  Search,
   VideoPlay,
 } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 import AppLayout from "../components/AppLayout.vue";
 import LoadingState from "../components/LoadingState.vue";
-import SecretRadarLogo from "../components/SecretRadarLogo.vue";
+import StateTag from "../components/StateTag.vue";
 import * as systemApi from "../api/system";
 import * as findingsApi from "../api/findings";
 import * as eventsApi from "../api/events";
 import * as ruleApi from "../api/rules";
-import { downloadJson } from "../utils/format";
+import { downloadJson, formatTimestamp } from "../utils/format";
 
 const router = useRouter();
-const compactHero = useCompactLayout("(max-width: 760px)");
 const overview = ref({});
 const channelConnectors = ref([]);
 const supportMatrix = ref([]);
@@ -300,10 +289,11 @@ const running = ref(false);
 const findingSummary = ref(null);
 const ruleCount = ref(null);
 const trendFindings = ref([]);
+const recentEvents = ref([]);
+const eventsAvailable = ref(false);
 const activeCredentialType = ref(null);
 const activeTrendIndex = ref(null);
 let overviewLoadInFlight = false;
-const metrics = computed(() => overview.value.metrics || []);
 const channelTypeCount = computed(() => (
   Number(coverage.value.configured_channel_type_count)
   || Number(overview.value.coverage?.configured_channel_type_count)
@@ -508,7 +498,7 @@ const channelBars = computed(() => {
     ...item,
     label: channelLabel(item.channel),
     color: channelCoverageColor,
-    percent: Math.max(5, Math.round(((Number(item.objects) || 0) / max) * 100)),
+    percent: Math.round(((Number(item.objects) || 0) / max) * 100),
   }));
 });
 
@@ -773,56 +763,6 @@ const activeTrendPoint = computed(() => (
   activeTrendIndex.value === null ? null : trendPoints.value[activeTrendIndex.value] || null
 ));
 
-function metricValue(field, label) {
-  const direct = overview.value[field];
-  if (direct !== undefined && direct !== null) return direct;
-  return metrics.value.find((item) => String(item.label || "").includes(label))?.value ?? "—";
-}
-
-function metricStat(field, label, suffix) {
-  const value = metricValue(field, label);
-  return value === "—" ? "暂未统计" : `${value}${suffix}`;
-}
-
-const pipeline = computed(() => [
-  {
-    index: "01",
-    icon: Connection,
-    color: "#2463eb",
-    title: "多渠道采集",
-    description: "授权接口、本地载体与公开来源",
-    stat: `${channelTypeCount.value} 种渠道 / 共 ${channelPlatformCount.value} 个平台`,
-  },
-  {
-    index: "02",
-    icon: Search,
-    color: "#0ea5b7",
-    title: "规则解析",
-    description: "候选提取、过滤与证据定位",
-    stat: ruleCredentialCount.value === "—"
-      ? "暂未统计"
-      : `${ruleCredentialCount.value} 条检测规则 / 实际检测 ${credentialTypeTotal.value} 种凭据类型`,
-  },
-  {
-    index: "03",
-    icon: DataAnalysis,
-    color: "#7657c8",
-    title: "指纹归一",
-    description: "跨来源收敛为统一凭据实体",
-    stat: metricStat("real_credentials_total", "凭据", " 个真实实体"),
-  },
-  {
-    index: "04",
-    icon: Bell,
-    color: "#16845f",
-    title: "告警处置",
-      description: "人工确认与验证结果闭环",
-    stat: pendingVerificationCount.value === "—"
-      ? "暂未统计"
-      : `${pendingVerificationCount.value} 条待验证凭据`,
-  },
-]);
-
 async function load({ silent = false } = {}) {
   if (overviewLoadInFlight) return;
   overviewLoadInFlight = true;
@@ -843,7 +783,7 @@ async function load({ silent = false } = {}) {
         source_kind: "全部来源",
         sort_by: "first_observed_at",
         sort_order: "desc",
-      }).catch(() => ({ items: [], pagination: {} })),
+      }).catch(() => ({ items: [], pagination: {}, unavailable: true })),
       ruleApi.getRules(),
     ]);
     channelConnectors.value = channels.collectors || [];
@@ -882,6 +822,8 @@ async function load({ silent = false } = {}) {
       remainingEventPages.forEach((page) => trendEvents.push(...(page.items || [])));
     }
     // 趋势按真实出现事件统计；统一发现项仅作为事件接口不可用时的回退。
+    recentEvents.value = trendEvents;
+    eventsAvailable.value = !events.unavailable && !events.error;
     if (trendEvents.length) trendFindings.value = trendEvents;
     ruleCount.value = Array.isArray(rules) ? rules.length : Number(rules?.total || 0) || null;
     const platformSummary = (stats.by_platform || []).map(([platform, count]) => ({ platform, count }));
@@ -955,225 +897,14 @@ onBeforeUnmount(() => {
   color: var(--overview-ink);
 }
 
-.overview-page::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  min-height: 100%;
-  background-image: url("/static/vue/branding/overview-tech-background.svg");
-  background-position: top center;
-  background-size: cover;
-  content: "";
-  opacity: .065;
-  pointer-events: none;
-}
-
-.overview-hero {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-  min-height: 270px;
-  margin: 0 0 18px;
-  padding: 34px 40px;
-  overflow: hidden;
-  border: 1px solid #203a5a;
-  border-radius: 14px;
-  background: var(--overview-navy);
-  color: #edf6ff;
-}
-
-.overview-hero::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  background-image:
-    linear-gradient(90deg, rgba(7, 19, 34, .72) 0%, rgba(7, 19, 34, .28) 62%, rgba(7, 19, 34, .08) 100%),
-    url("/static/vue/branding/overview-tech-background.svg");
-  background-position: center, center;
-  background-size: cover, cover;
-  content: "";
-  opacity: .9;
-  pointer-events: none;
-}
-
-.overview-hero::after {
-  z-index: 0;
-  position: absolute;
-  right: 27%;
-  bottom: -120px;
-  width: 360px;
-  height: 180px;
-  border: 1px solid rgba(34, 191, 208, .2);
-  border-radius: 50%;
-  content: "";
-  transform: rotate(-12deg);
-}
-
-.hero-copy {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  max-width: 760px;
-}
-
-.hero-visual {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  flex: 0 0 176px;
-  place-items: center;
-  width: 176px;
-  height: 176px;
-}
-
-.hero-radar-logo {
-  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, .26));
-}
-
-.hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.hero-kicker,
-.panel-kicker {
-  color: #82a0c5;
-  font-size: 10px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.hero-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #a8bedb;
-  font-size: 11px;
-}
-
-.hero-status i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #35c79a;
-  box-shadow: 0 0 0 3px rgba(53, 199, 154, .14);
-}
-
-.overview-hero h2 {
-  max-width: 680px;
-  margin: 0;
-  color: #f2f8ff;
-  font-size: 32px;
-  font-weight: 780;
-  letter-spacing: 0;
-  line-height: 1.35;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.overview-hero p {
-  max-width: 700px;
-  margin: 15px 0 0;
-  color: #a7bad3;
-  font-size: 13px;
-  line-height: 1.75;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 22px;
-}
-
-.overview-hero :deep(.el-button) {
-  min-height: 36px;
-}
-
-.overview-hero :deep(.el-button:not(.el-button--primary):not(.is-text)) {
-  border-color: #315274;
-  background: rgba(255, 255, 255, .05);
-  color: #d4e2f3;
-}
-
-.overview-hero :deep(.el-button:not(.el-button--primary):not(.is-text):hover) {
-  border-color: #5f9bc4;
-  background: rgba(95, 155, 196, .14);
-  color: #fff;
-}
-
-.overview-hero :deep(.el-button.is-text) {
-  color: #8ce3eb;
-}
-
-.pipeline-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.pipeline-stage {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--overview-line);
-  border-radius: 10px;
-  background: var(--overview-surface);
-  box-shadow: 0 7px 19px rgba(29, 48, 75, .04);
-  transition: border-color .18s ease, transform .18s ease;
-}
-
-.pipeline-stage:hover {
-  border-color: #a4c7d5;
-  transform: translateY(-2px);
-}
-
-.stage-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.stage-index {
-  color: #b2bdca;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .12em;
-}
-
-.stage-icon {
-  font-size: 19px;
-}
-
-.pipeline-stage h3 {
-  margin: 13px 0 5px;
-  color: #26364d;
-  font-size: 13px;
-  font-weight: 720;
-}
-
-.pipeline-stage p {
-  min-height: 36px;
-  margin: 0;
-  color: var(--overview-muted);
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.pipeline-stage strong {
-  display: block;
-  margin-top: 11px;
-  color: #197d8e;
-  font-size: 12px;
-  font-weight: 700;
-}
+.security-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 0 0 24px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.security-summary > div { display: grid; gap: 10px; min-width: 0; }
+.security-summary dt { color: var(--muted-strong); font-size: 13px; }
+.security-summary dd { margin: 0; font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.security-summary-warning dd { color: #996519; }
+.console-section { min-width: 0; margin-bottom: 28px; }
+.console-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.console-section-heading h3 { margin: 0; font-size: 15px; }
 
 .overview-grid {
   display: grid;
@@ -1193,7 +924,10 @@ onBeforeUnmount(() => {
 
 .overview-panel {
   min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
 }
+.overview-panel > header { margin-bottom: 22px; }
 
 .panel-heading {
   display: flex;
@@ -1641,68 +1375,16 @@ onBeforeUnmount(() => {
   text-anchor: end;
 }
 
-@media (max-width: 1100px) {
-  .pipeline-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 900px) {
-  .pipeline-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .overview-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .overview-hero {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 18px;
-    min-height: 0;
-    padding: 26px 22px;
-  }
-
-  .overview-hero h2 {
-    font-size: 24px;
-  }
-
-  .hero-copy {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .hero-visual {
-    order: -1;
-    flex: 0 0 56px;
-    width: 56px;
-    height: 56px;
-  }
-
-  .hero-radar-logo {
-    transform: none;
-  }
-
-  .hero-actions {
-    position: relative;
-    z-index: 2;
-  }
-
-  .hero-actions :deep(.el-button) {
-    flex: 1 1 auto;
-    margin-left: 0;
-  }
-
-  .pipeline-grid,
+  .security-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-grid {
     grid-template-columns: 1fr;
-  }
-
-  .pipeline-stage p {
-    min-height: 0;
   }
 
   .coverage-label {
@@ -1721,42 +1403,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 480px) {
-  .overview-hero {
-    padding: 22px 18px;
-  }
-
-  .overview-hero h2 {
-    max-width: 100%;
-    font-size: 24px;
-  }
-
-  .overview-hero p {
-    max-width: 100%;
-    font-size: 12px;
-  }
-
-  .hero-copy {
-    max-width: 100%;
-  }
-
-  .hero-visual {
-    position: static;
-  }
-
-  .hero-radar-logo {
-    transform: none;
-  }
-
-  .hero-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .hero-actions :deep(.el-button) {
-    justify-content: center;
-    width: 100%;
-  }
-
   .type-distribution {
     grid-template-columns: 1fr;
   }
@@ -1782,7 +1428,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pipeline-stage,
   .coverage-track span,
   .type-track span {
     transition: none;

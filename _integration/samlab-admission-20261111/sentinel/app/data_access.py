@@ -450,7 +450,7 @@ def _filter_events(items: list[dict], query: dict[str, Any]) -> list[dict]:
         and (not query["credential_type"] or item["credential_type"] == query["credential_type"])
         and (not query["risk_level"] or item["risk_level"] == query["risk_level"])
         and (not query["disposition"] or item["disposition"] == query["disposition"])
-        and (not query["source_kind"] or item["source_kind"] == query["source_kind"])
+        and (query["source_kind"] in {"", "全部来源"} or item["source_kind"] == query["source_kind"])
     ]
     reverse = query["sort_order"] == "desc"
     if query["sort_by"] == "risk_level":

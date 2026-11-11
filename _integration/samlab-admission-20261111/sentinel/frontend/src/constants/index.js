@@ -1,14 +1,14 @@
 export const navigation = [
-  { path: "/", label: "总览", icon: "Odometer" },
+  { path: "/", label: "总览", icon: "Odometer", group: "安全监测" },
   { path: "/monitoring-tasks", label: "监控任务", icon: "List" },
   { path: "/events", label: "事件列表", icon: "Warning" },
   { path: "/findings", label: "统一发现项", icon: "Search" },
   { path: "/verification", label: "验证中心", icon: "CircleCheck" },
   { path: "/channels", label: "渠道与规则", icon: "Connection" },
   { path: "/reports", label: "指标报告", icon: "DataAnalysis" },
-  { path: "/settings", label: "系统设置", icon: "Setting" },
-  { path: "/admission", label: "实验室人员准入", icon: "UserFilled", admin: true },
+  { path: "/admission", label: "实验室人员准入", icon: "UserFilled", admin: true, group: "实验室管理" },
   { path: "/administrators", label: "管理员", icon: "UserFilled", superadmin: true },
+  { path: "/settings", label: "系统设置", icon: "Setting", group: "系统运维" },
   { path: "/connector-runs", label: "运行审计", icon: "Timer" },
 ];
 

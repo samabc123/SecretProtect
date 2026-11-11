@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="导入实验室名单" width="760px" class="roster-dialog" align-center :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+  <el-dialog v-model="visible" title="导入实验室名单" width="760px" class="roster-dialog management-dialog" align-center :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
     <div class="file-toolbar">
       <el-button :icon="Download" :disabled="busy" @click="download">下载 CSV 模板</el-button>
       <label class="file-picker">名单文件（CSV，最大 1 MiB）
@@ -14,7 +14,7 @@
         <div><dt>重复跳过</dt><dd>{{ preview.summary.skip }}</dd></div>
         <div><dt>无效行</dt><dd>{{ preview.summary.error }}</dd></div>
       </dl>
-      <el-table v-if="!compact" :data="preview.rows" max-height="360" empty-text="暂无名单">
+      <el-table v-if="!compact" class="management-table" :data="preview.rows" max-height="360" empty-text="暂无名单">
         <el-table-column prop="line" label="行" width="60" />
         <el-table-column prop="email" label="邮箱" min-width="220" />
         <el-table-column prop="username" label="用户名" min-width="120" />

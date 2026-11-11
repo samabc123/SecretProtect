@@ -4,8 +4,8 @@
       title="监控任务"
       description="统一查看监控对象、采集方式和最近一次运行结果。"
     >
-      <el-button type="primary" @click="openCreate">新建监控任务</el-button>
-      <el-button @click="load">刷新</el-button>
+      <el-tooltip content="刷新" placement="top"><el-button :icon="Refresh" class="management-icon-button" aria-label="刷新" @click="load" /></el-tooltip>
+      <el-button type="primary" :icon="Plus" @click="openCreate">新建监控任务</el-button>
     </PageHeader>
 
     <el-alert
@@ -16,18 +16,12 @@
       show-icon
     />
 
-    <nav class="section-nav" aria-label="监控任务分区">
-      <a href="#task-summary">任务概览</a>
-      <a href="#task-filters">筛选条件</a>
-      <a href="#task-list">任务列表</a>
-    </nav>
-
     <section id="task-summary" class="page-section">
       <MetricGrid :items="summary" :show-hints="false" />
     </section>
 
     <section id="task-filters" class="page-section">
-      <el-card shadow="never" class="filter-card">
+      <div class="workspace-filter">
         <el-form
           :model="filters"
           inline
@@ -63,52 +57,59 @@
             <el-button @click="resetFilters">重置</el-button>
           </el-form-item>
         </el-form>
-      </el-card>
+      </div>
     </section>
 
-    <section id="task-list" class="page-section">
-      <el-card shadow="never">
-        <template #header>
-          <div class="card-heading">
-            <span>任务列表</span>
+    <section id="task-list" class="scan-workbench">
+      <aside class="target-explorer" aria-label="检测目标列表">
+        <h3><el-icon><Aim /></el-icon>检测目标</h3>
+        <button type="button" class="target-entry" :class="{ 'is-selected': !targetFilter }" :aria-pressed="!targetFilter" @click="targetFilter = ''"><span>全部目标</span><span class="target-count">{{ items.length }}</span></button>
+        <button v-for="target in targetGroups" :key="target.value" type="button" class="target-entry" :class="{ 'is-selected': targetFilter === target.value }" :aria-pressed="targetFilter === target.value" @click="targetFilter = target.value"><el-icon><Link /></el-icon><span>{{ target.value }}</span><span class="target-count">{{ target.count }}</span></button>
+        <p v-if="!targetGroups.length" class="muted">暂无已配置目标</p>
+      </aside>
+      <div class="scan-results">
+          <div class="workbench-heading">
+            <h3>{{ targetFilter || '全部任务' }}</h3>
             <span class="muted">{{ pagination.pagination.total_items }} 个任务</span>
           </div>
-        </template>
         <el-table
           v-loading="loading"
+          class="management-table"
           :data="pageItems"
           row-key="task_id"
           empty-text="当前筛选条件下没有监控任务"
         >
-          <el-table-column prop="task_name" label="任务" min-width="190">
+          <el-table-column prop="task_name" label="任务 / 目标" min-width="210">
             <template #default="{ row }">
               <strong>{{ row.task_name }}</strong>
-              <div class="muted">{{ row.task_id }}</div>
+              <div class="muted task-target">{{ row.monitor_object }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="渠道 / 平台" min-width="180">
+          <el-table-column label="采集来源" min-width="170">
             <template #default="{ row }">
-              <span>{{ optionLabel("channel", row.channel) }}</span>
+              <span>{{ collectionMethodLabel(row.collection_method) }}</span>
               <div class="muted">{{ row.platform }}</div>
             </template>
           </el-table-column>
-          <el-table-column prop="monitor_object" label="监控对象" min-width="220" show-overflow-tooltip />
-          <el-table-column label="采集方式" min-width="150">
-            <template #default="{ row }">{{ collectionMethodLabel(row.collection_method) }}</template>
-          </el-table-column>
-          <el-table-column prop="schedule" label="周期" min-width="100" />
+          <el-table-column prop="schedule" label="周期" min-width="90" />
+          <el-table-column label="状态" min-width="110"><template #default="{ row }"><StateTag :value="row.status" /></template></el-table-column>
           <el-table-column label="最近运行" min-width="165">
             <template #default="{ row }">{{ formatTimestamp(row.last_run, "尚未运行") }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="300" fixed="right">
+          <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openDetails(row)">详情</el-button>
-              <el-button link type="primary" @click="openEdit(row)">修改</el-button>
-              <el-button link type="primary" @click="run(row)">运行</el-button>
-              <el-button link @click="toggle(row)">
-                {{ row.status === "已暂停" ? "恢复" : "暂停" }}
-              </el-button>
-              <el-button link type="danger" @click="remove(row)">删除</el-button>
+              <div class="task-row-actions">
+                <el-tooltip content="详情" placement="top"><el-button text :icon="Document" aria-label="详情" @click="openDetails(row)" /></el-tooltip>
+                <el-dropdown trigger="click" @command="taskCommand(row, $event)">
+                  <el-button text :icon="MoreFilled" aria-label="更多操作" />
+                  <template #dropdown><el-dropdown-menu>
+                    <el-dropdown-item command="edit" :icon="EditPen">修改</el-dropdown-item>
+                    <el-dropdown-item command="run" :icon="VideoPlay">运行</el-dropdown-item>
+                    <el-dropdown-item command="toggle" :icon="row.status === '已暂停' ? VideoPlay : VideoPause">{{ row.status === '已暂停' ? '恢复' : '暂停' }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" :icon="Delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu></template>
+                </el-dropdown>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -119,10 +120,10 @@
           @update:page="onPage"
           @update:page-size="onPageSize"
         />
-      </el-card>
+      </div>
     </section>
 
-    <el-drawer v-model="detailsVisible" title="监控任务详情" size="520px">
+    <el-drawer v-model="detailsVisible" title="监控任务详情" size="min(520px, 100vw)">
       <template v-if="selectedTask">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="任务名称">{{ selectedTask.task_name }}</el-descriptions-item>
@@ -206,7 +207,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { Aim, Delete, Document, EditPen, Link, MoreFilled, Plus, Refresh, VideoPause, VideoPlay } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import AppLayout from "../components/AppLayout.vue";
@@ -221,6 +223,13 @@ import { slicePage, useUrlPagination } from "../composables/useUrlPagination";
 const route = useRoute();
 const router = useRouter();
 const items = ref([]);
+const targetFilter = ref("");
+const targetGroups = computed(() => {
+  const groups = new Map();
+  items.value.forEach(row => { if (row.monitor_object) groups.set(row.monitor_object, (groups.get(row.monitor_object) || 0) + 1); });
+  return Array.from(groups, ([value, count]) => ({ value, count }));
+});
+const filteredTasks = computed(() => items.value.filter(row => !targetFilter.value || row.monitor_object === targetFilter.value));
 const releaseNotice = ref("");
 const loading = ref(false);
 const saving = ref(false);
@@ -315,7 +324,7 @@ function channelSortRank(value) {
 }
 
 const pageItems = computed(() => {
-  const sorted = items.value
+  const sorted = filteredTasks.value
     .map((item, index) => ({ item, index }))
     .sort((left, right) => (
       channelSortRank(left.item.channel) - channelSortRank(right.item.channel)
@@ -323,6 +332,11 @@ const pageItems = computed(() => {
     ))
     .map(({ item }) => item);
   return slicePage(sorted, pagination.pagination).items;
+});
+watch(targetFilter, () => pagination.setPage(1));
+watch(() => filteredTasks.value.length, total => {
+  pagination.pagination.total_items = total;
+  pagination.pagination.total_pages = total ? Math.ceil(total / pagination.pagination.page_size) : 0;
 });
 
 function optionLabel(key, value) {
@@ -363,6 +377,7 @@ async function load() {
   try {
     const data = await api.getTasks(filters);
     items.value = data.items || [];
+    if (targetFilter.value && !targetGroups.value.some(row => row.value === targetFilter.value)) targetFilter.value = "";
     releaseNotice.value = data.release_notice || "";
     options.value =
       data.filters?.reduce((out, item) => {
@@ -375,9 +390,9 @@ async function load() {
       );
     }
     summary.value = data.summary || [];
-    pagination.pagination.total_items = items.value.length;
-    pagination.pagination.total_pages = items.value.length
-      ? Math.ceil(items.value.length / pagination.pagination.page_size)
+    pagination.pagination.total_items = filteredTasks.value.length;
+    pagination.pagination.total_pages = filteredTasks.value.length
+      ? Math.ceil(filteredTasks.value.length / pagination.pagination.page_size)
       : 0;
   } finally {
     loading.value = false;
@@ -404,6 +419,12 @@ async function applyFilters() {
 function openDetails(row) {
   selectedTask.value = row;
   detailsVisible.value = true;
+}
+function taskCommand(row, command) {
+  if (command === "edit") openEdit(row);
+  else if (command === "run") run(row);
+  else if (command === "toggle") toggle(row);
+  else if (command === "delete") remove(row);
 }
 
 function resetForm() {
@@ -485,3 +506,27 @@ function onPageSize(pageSize) { pagination.setPageSize(pageSize); }
 
 onMounted(load);
 </script>
+
+<style scoped>
+.scan-workbench { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-width: 0; border-top: 1px solid var(--line); }
+.target-explorer { min-width: 0; padding: 20px 16px 24px 0; border-right: 1px solid var(--line); }
+.target-explorer h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; font-size: 13px; }
+.target-entry { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 11px 10px; margin: 0 0 5px; border: 0; border-radius: 6px; color: var(--ink-soft); background: transparent; cursor: pointer; text-align: left; font-size: 12px; line-height: 1.6; }
+.target-entry > span:not(.target-count) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.target-entry .el-icon { flex-shrink: 0; margin-top: 3px; }
+.target-entry:hover { background: #eef1f5; }
+.target-entry.is-selected { background: var(--blue-soft); color: #2956b6; }
+.target-count { flex-shrink: 0; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.scan-results { min-width: 0; padding: 20px 0 0 20px; }
+.workbench-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.workbench-heading h3 { min-width: 0; margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.workbench-heading > span { flex-shrink: 0; font-size: 12px; }
+.task-target { overflow-wrap: anywhere; font-size: 12px; margin-top: 6px; }
+.task-row-actions { display: flex; align-items: center; gap: 4px; }
+.task-row-actions .el-button { padding: 4px; width: 28px; height: 32px; }
+@media (max-width: 1000px) {
+  .scan-workbench { grid-template-columns: minmax(0, 1fr); }
+  .target-explorer { border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; max-height: 240px; overflow-y: auto; }
+  .scan-results { padding-left: 0; }
+}
+</style>

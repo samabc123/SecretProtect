@@ -1,11 +1,11 @@
 <template>
-  <div class="metric-grid">
-    <el-card v-for="(item, index) in items" :key="item.label" shadow="never" class="metric-card" :class="`metric-card--${index % 4}`">
-      <div class="metric-topline"><span class="metric-label">{{ item.label }}</span><span class="metric-index">{{ String(index + 1).padStart(2, "0") }}</span></div>
-      <strong>{{ item.value ?? "-" }}</strong>
+  <dl class="metric-grid">
+    <div v-for="(item, index) in items" :key="item.label" class="metric-card" :class="`metric-card--${index % 4}`">
+      <dt class="metric-label">{{ item.label }}</dt>
+      <dd>{{ item.value ?? "-" }}</dd>
       <small v-if="showHints">{{ item.hint }}</small>
-    </el-card>
-  </div>
+    </div>
+  </dl>
 </template>
 <script setup>
 defineProps({
