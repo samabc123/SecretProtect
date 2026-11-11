@@ -1,0 +1,9 @@
+FROM golang:1.27.3-alpine
+ENV GOMAXPROCS=2 GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn
+WORKDIR /app/backend
+COPY backend/ ./
+RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=sub2api-gobuild,target=/root/.cache/go-build \
+    gofmt -w internal/pkg/antigravity/oauth.go internal/pkg/antigravity/oauth_test.go \
+        internal/pkg/geminicli/constants.go internal/pkg/geminicli/oauth.go internal/pkg/geminicli/oauth_test.go && \
+    go test -p 1 -tags unit ./internal/pkg/antigravity ./internal/pkg/geminicli

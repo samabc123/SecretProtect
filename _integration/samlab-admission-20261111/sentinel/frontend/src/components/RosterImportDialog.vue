@@ -18,7 +18,6 @@
         <el-table-column prop="line" label="行" width="60" />
         <el-table-column prop="email" label="邮箱" min-width="220" />
         <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column label="有效期" min-width="160"><template #default="{ row }">{{ row.expires_at ? new Date(row.expires_at * 1000).toLocaleString('zh-CN') : '未设置' }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><el-tag :type="row.state === 'error' ? 'danger' : row.state === 'add' ? 'success' : 'info'">{{ states[row.state] }}</el-tag> {{ row.message }}</template></el-table-column>
       </el-table>
     </template>

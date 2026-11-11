@@ -168,7 +168,7 @@ class AdmissionTests(unittest.TestCase):
     def test_admin_delivery_retry_cannot_restore_revoked_whitelist(self):
         payload = self.direct_account()
         result = self.signed("POST", PREFIX + "/admin-provision", payload).json()
-        self.store.revoke(result["member_id"], "user:admin", "管理员撤销该账号", delete=True)
+        self.store.delete_members([result["member_id"]], "user:admin", "管理员删除该账号")
         response = self.signed("POST", PREFIX + "/admin-provision", payload)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["allowed"])
@@ -230,30 +230,25 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT count(*) FROM samlab_service_nonces").fetchone()[0], 0)
         self.assertEqual(self.signed("POST", path, nonce=nonce, raw=raw).status_code, 200)
 
-    def test_expiry_advances_policy_once_and_cannot_renew_expired_member(self):
+    def test_approval_is_permanent_but_authorization_lease_stays_short(self):
         self.submit()
         approved = self.approve()
-        with self.store.connect() as c:
-            c.execute("UPDATE samlab_members SET expires_at=? WHERE id=?",
-                      (time.time() - 1, approved["member_id"]))
-        first = self.store.status("req-01")
-        second = self.store.status("req-01")
-        self.assertFalse(first["allowed"])
-        self.assertEqual(first["valid_until"], 0)
-        self.assertEqual(first["policy_version"], approved["policy_version"] + 1)
-        self.assertEqual(second["policy_version"], first["policy_version"])
-        with self.assertRaises(AuthError):
-            self.store.renew(approved["member_id"], "admin", time.time() + 100)
+        self.assertIsNone(approved["expires_at"])
+        with patch("app.samlab_admission.time.time", return_value=time.time() + 366 * 86400):
+            result = self.store.status("req-01")
+            self.assertTrue(result["allowed"])
+            self.assertEqual(result["policy_version"], approved["policy_version"])
+            self.assertAlmostEqual(result["valid_until"] - time.time(), 15, delta=0.01)
 
-    def test_renewal_updates_policy_and_bounds_lease_by_expiry(self):
+    def test_expiry_inputs_and_renewal_revocation_endpoints_are_removed(self):
         self.submit()
         approved = self.approve()
-        expiry = time.time() + 5
-        self.store.renew(approved["member_id"], "admin", expiry)
-        result = self.store.status("req-01")
-        self.assertTrue(result["allowed"])
-        self.assertEqual(result["policy_version"], approved["policy_version"] + 1)
-        self.assertLessEqual(result["valid_until"], expiry)
+        for action in ("renew", "revoke"):
+            self.assertEqual(self.write(f"/api/lab/admin/members/{approved['member_id']}/{action}",
+                                        {"expires_at": time.time() + 60, "confirmed": True,
+                                         "note": "人员离组停止准入"}).status_code, 404)
+        self.assertEqual(self.write("/api/lab/admin/requests/req-01/review",
+                                    {"decision": "approved", "expires_at": time.time() + 60}).status_code, 422)
 
     def test_public_application_routes_are_gone_even_with_old_cookies(self):
         for path in ("/lab", "/lab/activate", "/lab/workspace", "/api/lab/portal/signup",
@@ -427,10 +422,10 @@ class AdmissionTests(unittest.TestCase):
         self.assertGreaterEqual(repeated.pop("valid_until"), original.pop("valid_until"))
         self.assertEqual(repeated, original)
 
-    def test_revocation_denies_access_and_stale_ack(self):
+    def test_deletion_denies_access_and_stale_ack(self):
         self.submit()
         approved = self.approve()
-        self.assertEqual(self.write(f"/api/lab/admin/members/{approved['member_id']}/revoke", {"confirmed": True, "note": "人员离组停止准入"}).status_code, 200)
+        self.assertEqual(self.write(f"/api/lab/admin/members/{approved['member_id']}/delete", {"confirmed": True, "note": "人员离组停止准入"}).status_code, 200)
         result = self.signed("GET", PREFIX + "/requests/req-01").json()
         self.assertFalse(result["allowed"])
         self.assertEqual(result["account_state"], "pending_revoke")
@@ -450,13 +445,13 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(len(self.store.dashboard()["requests"]), 1)
         self.assertFalse(self.store.status("req-01")["allowed"])
 
-    def test_expiry_is_checked_on_every_status_query(self):
+    def test_permanent_members_remain_active_after_reinitialization(self):
         self.submit()
         approved = self.approve()
-        with self.store.connect() as c:
-            c.execute("UPDATE samlab_members SET expires_at=? WHERE id=?", (time.time()-1, approved["member_id"]))
-        self.assertFalse(self.store.status("req-01")["allowed"])
-        self.assertTrue(self.store.dashboard()["members"][0]["expired"])
+        self.store.initialize()
+        self.assertTrue(self.store.status("req-01")["allowed"])
+        self.assertEqual(self.store.status("req-01")["policy_version"], approved["policy_version"])
+        self.assertIsNone(self.store.dashboard()["members"][0]["expires_at"])
 
     def test_host_and_remote_browser_boundary_preserved(self):
         self.assertEqual(self.admin.get("/api/lab/admin/dashboard", headers={"host": "evil.example"}).status_code, 400)
@@ -497,7 +492,7 @@ class AdmissionTests(unittest.TestCase):
     def test_reapproval_does_not_silently_restore_revoked_member(self):
         self.submit()
         status = self.approve()
-        self.store.revoke(status["member_id"], "user:admin", "人员离组停止准入", delete=True)
+        self.store.delete_members([status["member_id"]], "user:admin", "人员离组停止准入")
         self.approve()
         self.assertFalse(self.store.status("req-01")["allowed"])
         self.submit(self.application("new-explicit-request"))
@@ -514,12 +509,12 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(self.store.status("req-other")["decision"], "pending")
 
-    def test_nonfinite_expiry_cannot_be_saved(self):
+    def test_legacy_expiry_header_is_rejected(self):
         self.submit()
-        with self.assertRaises(AuthError):
-            self.store.review("req-01", "approved", "user:admin", float("inf"))
-        with self.assertRaises(AuthError):
-            self.store.review("req-01", "approved", "user:admin", float("nan"))
+        for header in ("有效期", "expires_at"):
+            response = self.preview_roster(f"email,{header}\na@example.edu,\n")
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("永久", response.json()["detail"])
 
     def test_service_query_string_and_invalid_decision_rejected(self):
         self.assertEqual(self.signed("GET", PREFIX + "/requests/req-01?extra=1").status_code, 401)
@@ -541,7 +536,7 @@ class AdmissionTests(unittest.TestCase):
         return result.json()
 
     def test_roster_preview_commit_deduplicates_and_is_idempotent(self):
-        preview = self.preview_roster("邮箱,用户名,有效期\nA@example.edu,张三,\na@example.edu,重复,\nb@example.edu,,\n")
+        preview = self.preview_roster("邮箱,用户名\nA@example.edu,张三\na@example.edu,重复\nb@example.edu,\n")
         self.assertEqual(preview.status_code, 200, preview.text)
         self.assertEqual(preview.json()["summary"], {"add": 2, "skip": 1, "error": 0})
         self.assertEqual(self.store.dashboard()["members"], [])
@@ -585,14 +580,14 @@ class AdmissionTests(unittest.TestCase):
     def test_roster_reimport_cannot_restore_revoked_or_deleted_people(self):
         self.import_roster("email\na@example.edu\n")
         member = self.store.dashboard()["members"][0]
-        self.store.revoke(member["id"], "user:admin", "已确认人员离组", delete=True)
+        self.store.delete_members([member["id"]], "user:admin", "已确认人员离组")
         result = self.import_roster("email\na@example.edu\n")
         self.assertEqual(result["summary"], {"add": 0, "skip": 1, "error": 0})
         self.assertEqual(self.store.dashboard()["members"], [])
 
     def test_roster_matches_by_email_but_does_not_auto_approve_unverified_applicant(self):
         self.submit()
-        self.import_roster("邮箱,用户名,有效期\nstudent01@example.edu,名单姓名,2027-01-01T00:00:00+08:00\n")
+        self.import_roster("邮箱,用户名\nstudent01@example.edu,名单姓名\n")
         member = self.store.dashboard()["members"][0]
         self.assertTrue(self.store.dashboard()["requests"][0]["roster_match"])
         self.assertFalse(self.store.status("req-01")["allowed"])
@@ -637,6 +632,142 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(results[0], results[1])
         self.assertEqual(len(self.store.dashboard()["members"]), 1)
         self.assertEqual(sum(a["action"] == "whitelist.imported" for a in self.store.dashboard()["audits"]), 1)
+
+    def approved_pair(self):
+        members = []
+        for index in (1, 2):
+            request_id = f"batch-{index}"
+            self.submit(self.application(request_id, username=f"batch_user_{index}",
+                                         email=f"batch-{index}@example.edu"))
+            members.append(self.approve(request_id)["member_id"])
+        return members
+
+    def test_batch_delete_disables_all_members_keeps_audits_and_rejects_stale_ack(self):
+        members = self.approved_pair()
+        result = self.write("/api/lab/admin/members/batch-delete", {
+            "member_ids": members, "confirmed": True, "note": "实验室人员批量离组"})
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["deleted"], 2)
+        self.assertEqual(self.store.dashboard()["members"], [])
+        for index in (1, 2):
+            status = self.store.status(f"batch-{index}")
+            self.assertFalse(status["allowed"])
+            self.assertEqual(status["valid_until"], 0)
+            self.assertEqual(status["policy_version"], 2)
+            self.assertEqual(status["account_state"], "pending_revoke")
+            with self.assertRaises(AuthError):
+                self.store.acknowledge(f"batch-{index}", str(index), 1, "active")
+        audits = self.store.dashboard()["audits"]
+        self.assertEqual(sum(a["action"] == "whitelist.deleted" for a in audits), 2)
+        self.assertEqual(sum(a["action"] == "whitelist.batch_deleted" for a in audits), 1)
+        self.assertTrue(all(a["actor"] == "user:admin" for a in audits if a["action"] == "whitelist.deleted"))
+
+    def test_batch_delete_unknown_id_is_atomic(self):
+        members = self.approved_pair()
+        result = self.write("/api/lab/admin/members/batch-delete", {
+            "member_ids": [*members, "unknown"], "confirmed": True, "note": "实验室人员批量离组"})
+        self.assertEqual(result.status_code, 404)
+        self.assertEqual(len(self.store.dashboard()["members"]), 2)
+        self.assertTrue(all(self.store.status(f"batch-{index}")["allowed"] for index in (1, 2)))
+
+    def test_batch_delete_audit_failure_rolls_back_every_member(self):
+        members = self.approved_pair()
+        original = self.store._audit
+        calls = []
+
+        def fail_second(*args):
+            calls.append(1)
+            if len(calls) == 2:
+                raise sqlite3.OperationalError("synthetic audit storage failure")
+            return original(*args)
+
+        with patch.object(SamlabAdmissionStore, "_audit", side_effect=fail_second):
+            response = self.write("/api/lab/admin/members/batch-delete", {
+                "member_ids": members, "confirmed": True, "note": "实验室人员批量离组"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(len(self.store.dashboard()["members"]), 2)
+        self.assertFalse(any(a["action"] == "whitelist.deleted" for a in self.store.dashboard()["audits"]))
+
+    def test_batch_delete_is_idempotent_for_duplicates_and_concurrent_retries(self):
+        members = self.approved_pair()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(
+                lambda _: self.store.delete_members(members + [members[0]], "user:admin", "实验室人员批量离组"),
+                range(2)))
+        self.assertEqual(sorted(r["deleted"] for r in results), [0, 2])
+        self.assertEqual(sorted(r["already_deleted"] for r in results), [0, 2])
+        self.assertEqual(self.store.status("batch-1")["policy_version"], 2)
+        self.assertEqual(sum(a["action"] == "whitelist.deleted" for a in self.store.dashboard()["audits"]), 2)
+
+    def test_batch_delete_requires_auth_csrf_explicit_confirmation_and_bounded_ids(self):
+        members = self.approved_pair()
+        body = {"member_ids": members, "confirmed": True, "note": "实验室人员批量离组"}
+        path = "/api/lab/admin/members/batch-delete"
+        with self.client() as anon:
+            self.assertEqual(anon.post(path, json=body).status_code, 401)
+        self.assertEqual(self.admin.post(path, json=body).status_code, 403)
+        self.assertEqual(self.write(path, {**body, "confirmed": False}).status_code, 400)
+        for extra in ({"member_ids": []}, {"member_ids": ["x"] * 501}, {"member_ids": [""]},
+                      {"member_ids": [123]}, {"confirmed": "true"}, {"note": "短"}):
+            self.assertEqual(self.write(path, {**body, **extra}).status_code, 422)
+        self.assertEqual(len(self.store.dashboard()["members"]), 2)
+
+    def test_roster_template_and_new_members_have_no_expiry(self):
+        template = self.admin.get("/api/lab/admin/roster/template")
+        self.assertEqual(template.text.lstrip("\ufeff"), "邮箱,用户名\r\n")
+        self.import_roster("email\npermanent@example.edu\n")
+        self.assertIsNone(self.store.dashboard()["members"][0]["expires_at"])
+
+    def legacy_permanent_store(self):
+        store = SamlabAdmissionStore(Path(self.temp.name) / ("migration-" + secrets.token_hex(8) + ".sqlite3"))
+        store.initialize()
+        ids = []
+        for index in (1, 2, 3):
+            store.submit(f"legacy-{index}", f"legacy_{index}", email=f"legacy-{index}@example.edu")
+            ids.append(store.review(f"legacy-{index}", "approved", "user:admin")["member_id"])
+        with store.connect() as c:
+            c.execute("DELETE FROM samlab_schema_migrations WHERE id='permanent-membership-v1'")
+            c.execute("UPDATE samlab_members SET expires_at=? WHERE id=?", (time.time() + 10000, ids[0]))
+            c.execute("UPDATE samlab_members SET expires_at=? WHERE id=?", (time.time() - 100, ids[1]))
+            c.execute("UPDATE samlab_members SET status='revoked',sync_state='pending_revoke' WHERE id=?", (ids[2],))
+        return store
+
+    def test_permanent_migration_is_idempotent_without_restoring_expired_or_revoked_people(self):
+        store = self.legacy_permanent_store()
+        store.initialize()
+        store.initialize()
+        first = store.status("legacy-1")
+        self.assertTrue(first["allowed"])
+        self.assertIsNone(first["expires_at"])
+        self.assertEqual(first["policy_version"], 2)
+        self.assertEqual(len(store.dashboard()["members"]), 1)
+        for index in (2, 3):
+            self.assertFalse(store.status(f"legacy-{index}")["allowed"])
+        audits = store.dashboard()["audits"]
+        self.assertEqual(sum(a["action"] == "whitelist.permanent_enabled" for a in audits), 1)
+        self.assertEqual(sum(a["action"] == "whitelist.legacy_deleted" for a in audits), 2)
+
+    def test_permanent_migration_audit_failure_keeps_original_policy(self):
+        store = self.legacy_permanent_store()
+        with patch.object(SamlabAdmissionStore, "_audit", side_effect=sqlite3.OperationalError("synthetic")):
+            with self.assertRaises(sqlite3.OperationalError):
+                store.initialize()
+        with store.connect() as c:
+            row = c.execute("SELECT * FROM samlab_members WHERE username='legacy_1'").fetchone()
+            self.assertIsNotNone(row["expires_at"])
+            self.assertEqual(row["policy_version"], 1)
+            self.assertIsNone(c.execute("SELECT 1 FROM samlab_schema_migrations "
+                                       "WHERE id='permanent-membership-v1'").fetchone())
+
+    def test_old_import_preview_with_expiry_cannot_commit(self):
+        batch_id = self.preview_roster("email\nstaged@example.edu\n").json()["batch_id"]
+        with self.store.connect() as c:
+            rows = json.loads(c.execute("SELECT rows_json FROM samlab_import_batches WHERE id=?",
+                                        (batch_id,)).fetchone()[0])
+            rows[0]["expires_at"] = time.time() + 60
+            c.execute("UPDATE samlab_import_batches SET rows_json=? WHERE id=?", (json.dumps(rows), batch_id))
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", {"batch_id": batch_id}).status_code, 409)
+        self.assertEqual(self.store.dashboard()["members"], [])
 
 
 if __name__ == "__main__":

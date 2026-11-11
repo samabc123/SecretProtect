@@ -66,3 +66,32 @@ supported. Do not paste client secrets into source files.
 
 Rule test fixtures tagged `!synthetic` generate deterministic, unissued values
 locally. They are not live keys and are never validated against provider APIs.
+The existing rule self-test baseline has four failing fixtures:
+`openrouter-api-key`, `github-pat`, `dingtalk-webhook` and
+`generic-env-assignment`. Publication cleanup preserves that baseline; this
+revision does not claim complete detection coverage or production integration.
+
+## Permanent Roster
+
+Roster CSV files contain mandatory `email` / `邮箱` and optional `username` /
+`用户名` columns. Passwords, student numbers and expiry columns are rejected.
+Imported emails still require an administrator's approval of the actual
+registration request; import does not verify mailbox ownership.
+
+Whitelist membership is permanent until explicitly removed. Approval, account
+creation, login and API access remain distinct operations. Session expiry,
+administrator account disabling and the worker's short authorization lease are
+unchanged.
+
+Administrators can select the displayed rows and delete up to 500 members in
+one atomic operation. Single and batch deletion share the same logic, require
+confirmation and a reason, preserve audit records and queue account/session/API
+authorization invalidation. Repeated delivery is idempotent.
+
+Before first startup of this revision, back up the admission database. An
+audited, transactional migration clears future membership expiry for active
+members. Previously expired or revoked members are not restored; their state
+is merged into logical deletion. Historical columns and audit records remain
+for recovery. The renewal and separate revocation endpoints are removed.
+Rollback requires the pre-upgrade database backup as well as the old code
+revision; reverting code alone does not restore former expiry values.

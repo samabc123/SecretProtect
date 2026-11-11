@@ -9,8 +9,8 @@
       <el-alert :title="data.integration.service_connected ? '隔离候选环境已连接；生产平台尚未发布此改造。' : '尚未收到近期服务连接，账号状态以实际回执为准。'" type="warning" :closable="false" show-icon />
       <dl class="admission-status">
         <div><dt>待审批</dt><dd>{{ pending.length }}</dd></div>
-        <div><dt>有效白名单</dt><dd>{{ data.members.filter(m => m.status === 'active' && !m.expired).length }}</dd></div>
-        <div><dt>待平台处理</dt><dd>{{ data.members.filter(m => ['pending_create', 'pending_revoke'].includes(m.sync_state) || m.expired).length }}</dd></div>
+        <div><dt>有效白名单</dt><dd>{{ data.members.filter(m => m.status === 'active').length }}</dd></div>
+        <div><dt>待平台处理</dt><dd>{{ data.members.filter(m => ['pending_create', 'pending_revoke'].includes(m.sync_state)).length }}</dd></div>
         <div><dt>服务签名</dt><dd>{{ data.integration.signature_configured ? "已配置" : "未配置" }}</dd></div>
       </dl>
       <div class="admission-toolbar">
@@ -33,18 +33,20 @@
           </el-table>
         </el-tab-pane>
         <el-tab-pane label="白名单" name="members">
-          <el-table :data="filtered(data.members)" empty-text="暂无已批准的 Samlab 人员">
+          <div class="member-actions">
+            <span aria-live="polite">已选择 {{ selectedMembers.length }} 人</span>
+            <el-button :icon="Delete" type="danger" plain :disabled="!selectedMembers.length || loading || saving" @click="openRemoval(selectedMembers)">批量删除</el-button>
+          </div>
+          <el-table ref="memberTable" row-key="id" :data="filteredMembers" empty-text="暂无已批准的 Samlab 人员" @selection-change="selectedMembers = $event">
+            <el-table-column type="selection" width="48" />
             <el-table-column prop="username" label="用户名" min-width="135" />
             <el-table-column prop="email" label="邮箱" min-width="230" />
             <el-table-column label="来源" min-width="165"><template #default="{ row }">{{ sourceLabels[row.source] || '用户申请' }}</template></el-table-column>
-            <el-table-column label="准入" min-width="105"><template #default="{ row }"><el-tag :type="row.expired || row.status !== 'active' ? 'danger' : 'success'">{{ row.expired ? "已到期" : row.status === "active" ? "有效" : "已撤销" }}</el-tag></template></el-table-column>
-            <el-table-column label="平台状态" min-width="165"><template #default="{ row }">{{ row.expired ? "已到期，待平台核对" : row.awaiting_registration ? "待注册或确认申请" : accountLabels[row.sync_state] }}</template></el-table-column>
+            <el-table-column label="准入" min-width="105"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'danger'">{{ row.status === "active" ? "永久有效" : "已停用" }}</el-tag></template></el-table-column>
+            <el-table-column label="平台状态" min-width="165"><template #default="{ row }">{{ row.awaiting_registration ? "待注册或确认申请" : accountLabels[row.sync_state] }}</template></el-table-column>
             <el-table-column prop="account_id" label="平台账号编号" min-width="140" />
-            <el-table-column label="有效期" min-width="185"><template #default="{ row }">{{ date(row.expires_at) || '未设置' }}</template></el-table-column>
-            <el-table-column label="操作" width="245" fixed="right"><template #default="{ row }">
-              <el-button :icon="Calendar" text :disabled="row.status !== 'active' || row.expired" @click="openRenewal(row)">续期</el-button>
-              <el-button :icon="CircleClose" text :disabled="row.status !== 'active'" @click="openRemoval(row, 'revoke')">撤销</el-button>
-              <el-button :icon="Delete" text type="danger" @click="openRemoval(row, 'delete')">删除</el-button>
+            <el-table-column label="操作" width="95" fixed="right"><template #default="{ row }">
+              <el-button :icon="Delete" text type="danger" :disabled="saving" @click="openRemoval([row])">删除</el-button>
             </template></el-table-column>
           </el-table>
         </el-tab-pane>
@@ -63,21 +65,15 @@
         <p class="subject">{{ selected?.username }}</p><p class="subject">{{ selected?.email }}</p>
         <el-alert v-if="dialogError" :title="dialogError" type="error" :closable="false" />
         <el-radio-group v-model="decision" aria-label="是否批准进入白名单"><el-radio value="approved">同意</el-radio><el-radio value="rejected">不同意</el-radio></el-radio-group>
-        <el-form v-if="decision === 'approved'" label-position="top"><el-form-item label="有效期（可选）"><el-date-picker v-model="expiry" type="datetime" placeholder="选择到期时间" /></el-form-item></el-form>
         <template #footer><el-button :disabled="saving" @click="reviewVisible = false">取消</el-button><el-button type="primary" :loading="saving" :disabled="!decision" @click="review">确认审批</el-button></template>
       </el-dialog>
-      <el-dialog v-model="renewalVisible" title="白名单续期" width="480px" class="samlab-dialog">
-        <p class="subject">{{ selected?.username }} · {{ selected?.email }}</p>
-        <el-alert v-if="dialogError" :title="dialogError" type="error" :closable="false" />
-        <el-date-picker v-model="expiry" type="datetime" aria-label="新的到期时间" placeholder="新的到期时间" />
-        <template #footer><el-button @click="renewalVisible = false">取消</el-button><el-button type="primary" :loading="saving" :disabled="!expiry" @click="renew">确认续期</el-button></template>
-      </el-dialog>
-      <el-dialog v-model="removalVisible" :title="removalAction === 'delete' ? '删除白名单人员' : '撤销准入'" width="480px" class="samlab-dialog" :close-on-click-modal="false">
-        <p class="subject">{{ selected?.username }} · {{ selected?.email }}</p>
+      <el-dialog v-model="removalVisible" :title="removalTargets.length > 1 ? '批量删除白名单人员' : '删除白名单人员'" width="560px" class="samlab-dialog" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+        <p class="subject">将删除 {{ removalTargets.length }} 名人员，并停止关联账号准入。</p>
+        <ul class="removal-subjects" aria-label="待删除人员"><li v-for="row in removalTargets" :key="row.id">{{ row.username }} · {{ row.email }}</li></ul>
         <el-alert v-if="dialogError" :title="dialogError" type="error" :closable="false" />
         <el-form label-position="top"><el-form-item label="处理原因（5—500 字）"><el-input v-model="note" type="textarea" :rows="3" maxlength="500" aria-label="处理原因" /></el-form-item></el-form>
-        <el-checkbox v-model="confirmed">确认停止该人员准入，等待平台执行停用并回执</el-checkbox>
-        <template #footer><el-button :disabled="saving" @click="removalVisible = false">取消</el-button><el-button type="danger" :loading="saving" :disabled="!confirmed || note.trim().length < 5" @click="remove">确认处理</el-button></template>
+        <el-checkbox v-model="confirmed">确认删除所选人员，停止关联账号准入并保留审计</el-checkbox>
+        <template #footer><el-button :disabled="saving" @click="removalVisible = false">取消</el-button><el-button type="danger" :icon="Delete" :loading="saving" :disabled="!confirmed || note.trim().length < 5" @click="remove">确认删除</el-button></template>
       </el-dialog>
       <RosterImportDialog v-model="importVisible" @imported="tab = 'members'; load()" />
     </main>
@@ -85,9 +81,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { Calendar, CircleClose, Delete, EditPen, Refresh, Search, Upload } from "@element-plus/icons-vue";
+import { Delete, EditPen, Refresh, Search, Upload } from "@element-plus/icons-vue";
 import RosterImportDialog from "../components/RosterImportDialog.vue";
 import AppLayout from "../components/AppLayout.vue";
 import { admissionApi as api, admissionError } from "../api/admission";
@@ -95,14 +91,15 @@ import { admissionApi as api, admissionError } from "../api/admission";
 const data = reactive({ platform: { url: "https://researchchat.samlab.cn/" }, requests: [], members: [], audits: [], integration: {}, legacy_people_count: 0, list_limit: 500 });
 const loading = ref(false), saving = ref(false), error = ref(""), query = ref(""), tab = ref("requests"), updated = ref("");
 const selected = ref(null), decision = ref(""), reviewVisible = ref(false), dialogError = ref("");
-const removalVisible = ref(false), removalAction = ref(""), note = ref(""), confirmed = ref(false);
-const renewalVisible = ref(false), expiry = ref(null);
+const removalVisible = ref(false), removalTargets = ref([]), note = ref(""), confirmed = ref(false);
+const memberTable = ref(null), selectedMembers = ref([]);
 const importVisible = ref(false);
 const pending = computed(() => data.requests.filter(r => r.status === "pending"));
+const filteredMembers = computed(() => filtered(data.members));
 const decisionLabels = { pending: "待审批", approved: "已同意", rejected: "不同意" };
 const sourceLabels = { self: "用户申请", admin_direct: "管理员直接创建", admin_invite: "管理员邀请开通", roster: "文件导入" };
 const accountLabels = { pending_create: "待平台开通", active: "平台已回执开通", pending_revoke: "待平台停用", disabled: "平台已回执停用" };
-const auditLabels = { "whitelist.imported": "导入名单人员", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "撤销准入", "whitelist.deleted": "删除白名单人员", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
+const auditLabels = { "whitelist.imported": "导入名单人员", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "历史撤销准入", "whitelist.deleted": "删除白名单人员", "whitelist.batch_deleted": "批量删除白名单人员", "whitelist.permanent_enabled": "转为永久白名单", "whitelist.legacy_deleted": "合并历史停用状态", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
 const date = value => value ? new Date(value * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
 const decisionType = value => ({ pending: "warning", approved: "success", rejected: "danger" })[value];
 function filtered(rows) { const q = query.value.trim().toLowerCase(); return rows.filter(r => !q || `${r.username} ${r.email}`.toLowerCase().includes(q)); }
@@ -111,27 +108,23 @@ async function load(background = false) {
   loading.value = true;
   try {
     Object.assign(data, (await api.get("/admin/dashboard")).data);
+    memberTable.value?.clearSelection();
+    selectedMembers.value = [];
     updated.value = date(Date.now() / 1000); error.value = "";
   } catch (e) { error.value = admissionError(e); if (!background) ElMessage.error(error.value); }
   finally { loading.value = false; }
 }
-function openReview(row) { selected.value = row; decision.value = ""; expiry.value = null; dialogError.value = ""; reviewVisible.value = true; }
-function openRenewal(row) { selected.value = row; expiry.value = null; dialogError.value = ""; renewalVisible.value = true; }
-async function renew() {
-  if (!expiry.value || saving.value) return;
-  saving.value = true;
-  try {
-    await api.post(`/admin/members/${selected.value.id}/renew`, { expires_at: new Date(expiry.value).getTime() / 1000 });
-    renewalVisible.value = false; ElMessage.success("已续期，等待平台同步。"); await load();
-  } catch (e) { dialogError.value = admissionError(e); }
-  finally { saving.value = false; }
+function openReview(row) { selected.value = row; decision.value = ""; dialogError.value = ""; reviewVisible.value = true; }
+function openRemoval(rows) {
+  if (!rows.length || saving.value) return;
+  removalTargets.value = [...rows]; note.value = ""; confirmed.value = false; dialogError.value = ""; removalVisible.value = true;
 }
-function openRemoval(row, action) { selected.value = row; removalAction.value = action; note.value = ""; confirmed.value = false; dialogError.value = ""; removalVisible.value = true; }
+watch([query, tab], () => { memberTable.value?.clearSelection(); selectedMembers.value = []; });
 async function review() {
   if (!decision.value || saving.value) return;
   saving.value = true;
   try {
-    await api.post(`/admin/requests/${selected.value.request_id}/review`, { decision: decision.value, expires_at: decision.value === "approved" && expiry.value ? new Date(expiry.value).getTime() / 1000 : null });
+    await api.post(`/admin/requests/${selected.value.request_id}/review`, { decision: decision.value });
     reviewVisible.value = false;
     ElMessage.success(decision.value === "approved" ? "已加入白名单，等待 Samlab 平台开通回执。" : "已拒绝本次申请。");
     await load();
@@ -139,16 +132,16 @@ async function review() {
   finally { saving.value = false; }
 }
 async function remove() {
-  if (saving.value) return;
+  if (saving.value || !removalTargets.value.length || !confirmed.value || note.value.trim().length < 5) return;
   saving.value = true;
   try {
-    const result = await api.post(`/admin/members/${selected.value.id}/${removalAction.value}`, { note: note.value, confirmed: confirmed.value });
+    const result = await api.post("/admin/members/batch-delete", { member_ids: removalTargets.value.map(row => row.id), note: note.value, confirmed: confirmed.value });
     removalVisible.value = false; ElMessage.success(result.data.message); await load();
   } catch (e) { dialogError.value = admissionError(e); }
   finally { saving.value = false; }
 }
 let timer;
-onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !renewalVisible.value && !importVisible.value) load(true); }, 15000); });
+onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !importVisible.value && !selectedMembers.value.length) load(true); }, 15000); });
 onUnmounted(() => window.clearInterval(timer));
 </script>
 
@@ -167,6 +160,8 @@ onUnmounted(() => window.clearInterval(timer));
 .admission-toolbar .el-input { max-width: 350px; }
 .admission-footnote { line-height: 1.7; margin: 18px 0 0; }
 .subject { overflow-wrap: anywhere; font-size: 14px; }
+.member-actions { display: flex; align-items: center; gap: 16px; margin: 0 0 14px; min-height: 34px; font-size: 13px; }
+.removal-subjects { max-height: 200px; overflow: auto; padding-left: 22px; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
 :deep(.el-checkbox) { height: auto; white-space: normal; }
 :deep(.el-checkbox__label) { white-space: normal; line-height: 1.7; }
 @media (max-width: 700px) { .admission-status { gap: 16px; } .admission-toolbar { align-items: stretch; flex-direction: column; } }

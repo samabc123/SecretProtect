@@ -99,7 +99,7 @@ def main():
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
                     import_dialog.get_by_label("名单文件", exact=True).set_input_files({
                         "name": "lab-roster.csv", "mimeType": "text/csv",
-                        "buffer": "邮箱,用户名,有效期\nroster-browser@example.edu,导入人员,\nroster-browser@example.edu,重复行,\n".encode("utf-8-sig"),
+                        "buffer": "邮箱,用户名\nroster-browser@example.edu,导入人员\nroster-browser@example.edu,重复行\n".encode("utf-8-sig"),
                     })
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
                     page.screenshot(path=str(OUTPUT / "roster-import-desktop.png"), full_page=True)
@@ -121,6 +121,10 @@ def main():
                     dialog.get_by_role("button", name="确认审批").click()
                     expect(dialog).not_to_be_visible()
                     page.get_by_role("tab", name="白名单", exact=True).click()
+                    expect(page.get_by_role("columnheader", name="有效期", exact=True)).to_have_count(0)
+                    expect(page.get_by_role("button", name="续期", exact=True)).to_have_count(0)
+                    expect(page.get_by_role("button", name="撤销", exact=True)).to_have_count(0)
+                    expect(page.get_by_text("永久有效", exact=True)).to_have_count(2)
                     expect(page.get_by_text("待平台开通", exact=True)).to_be_visible()
                     expect(page.get_by_text("平台已回执开通", exact=True)).to_have_count(0)
                     page.screenshot(path=str(OUTPUT / "whitelist-desktop.png"), full_page=True)
@@ -128,6 +132,41 @@ def main():
                     page.screenshot(path=str(OUTPUT / "whitelist-mobile.png"), full_page=True)
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Mobile page overflow"
                     results.append("one approval adds whitelist; no fake platform account success")
+                    page.set_viewport_size({"width": 1440, "height": 1000})
+                    batch_button = page.get_by_role("button", name="批量删除", exact=True)
+                    expect(batch_button).to_be_disabled()
+                    roster_row = page.get_by_role("row").filter(has_text="roster-browser@example.edu")
+                    roster_row.get_by_role("button", name="删除", exact=True).click()
+                    single_dialog = page.get_by_role("dialog", name="删除白名单人员", exact=True)
+                    expect(single_dialog.get_by_label("待删除人员")).to_contain_text("roster-browser@example.edu")
+                    single_dialog.get_by_role("button", name="取消", exact=True).click()
+                    roster_row.locator("label.el-checkbox").click()
+                    expect(roster_row.get_by_role("checkbox")).to_be_checked()
+                    expect(batch_button).to_be_enabled()
+                    page.get_by_role("textbox", name="搜索用户名或邮箱").fill("student01")
+                    expect(batch_button).to_be_disabled()
+                    page.get_by_role("textbox", name="搜索用户名或邮箱").fill("")
+                    page.get_by_role("tabpanel", name="白名单").locator("thead label.el-checkbox").first.click()
+                    batch_button.click()
+                    removal = page.get_by_role("dialog", name="批量删除白名单人员", exact=True)
+                    expect(removal.get_by_label("待删除人员").get_by_role("listitem")).to_have_count(2)
+                    expect(removal.get_by_role("button", name="确认删除", exact=True)).to_be_disabled()
+                    removal.get_by_role("button", name="取消", exact=True).click()
+                    expect(roster_row).to_be_visible()
+                    batch_button.click()
+                    removal.get_by_role("textbox", name="处理原因").fill("实验室人员批量离组")
+                    removal.locator("label.el-checkbox").click()
+                    page.screenshot(path=str(OUTPUT / "batch-delete-desktop.png"), full_page=True)
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    page.screenshot(path=str(OUTPUT / "batch-delete-mobile.png"), full_page=True)
+                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Batch delete mobile overflow"
+                    removal.get_by_role("button", name="确认删除", exact=True).click()
+                    expect(removal).not_to_be_visible()
+                    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("暂无已批准的 Samlab 人员")).to_be_visible()
+                    assert not admission.status("synthetic-request-01")["allowed"]
+                    with admission.connect() as c:
+                        assert c.execute("SELECT count(*) FROM samlab_members WHERE deleted_at IS NOT NULL").fetchone()[0] == 2
+                    results.append("permanent roster; single-delete confirmation; filtered selections clear; batch cancel and atomic delete; desktop/mobile fit")
                     page.set_viewport_size({"width": 1440, "height": 1000})
                     page.get_by_role("tab", name="注册申请", exact=False).click()
                     page.get_by_role("row").filter(has_text="student02@example.edu").get_by_role("button", name="审批").click()

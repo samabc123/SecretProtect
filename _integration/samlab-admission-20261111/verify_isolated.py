@@ -29,7 +29,8 @@ SECURITY = "http://127.0.0.1:18011"
 
 
 def remote(command):
-    result = subprocess.run(SSH + [command], capture_output=True, text=True, timeout=90)
+    result = subprocess.run(SSH + [command], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=90)
     if result.returncode:
         raise RuntimeError("isolated remote operation failed: " + result.stderr[-1500:])
     return result.stdout
@@ -212,14 +213,14 @@ def main():
                     wait_for(lambda: business.get("/api/v1/auth/me", headers=member_headers).status_code == 200,
                              seconds=80)
                     results.append("worker restart resumes durable synchronization without resubmission")
-                    require(security.post(f"/api/lab/admin/members/{approved['member_id']}/revoke",
-                                          json={"note": "isolated revocation test", "confirmed": True},
+                    require(security.post(f"/api/lab/admin/members/{approved['member_id']}/delete",
+                                          json={"note": "isolated unified deletion test", "confirmed": True},
                                           headers={"X-CSRF-Token": csrf}))
                     wait_for(lambda: business.get("/api/v1/auth/me", headers=member_headers).status_code in (401, 403))
                     assert business.post("/api/v1/auth/refresh", json={"refresh_token": member["refresh_token"]}).status_code >= 400
                     assert business.get("/v1/sub2api/billing", headers=key_headers).status_code in (401, 403)
-                    results.append("revocation invalidates old access and refresh sessions")
-                    results.append("revoked account cannot use its existing API key at the gateway")
+                    results.append("unified deletion invalidates old access and refresh sessions")
+                    results.append("deleted account cannot use its existing API key at the gateway")
                     # A second synthetic identity validates rejection without granting access.
                     rejected = {**payload, "request_id": "isolated-rejected-" + secrets.token_hex(8),
                                 "username": "rejected_" + suffix,
@@ -314,12 +315,25 @@ def main():
                                          headers=admin_headers).status_code == 409
                     results.append("optional admin invitation is idempotent, autoapproved, and activates only once")
                     delegated_request = next(r for r in dashboard()["requests"] if r["request_id"] == delegated["request_id"])
-                    require(security.post(f"/api/lab/admin/members/{delegated_request['member_id']}/renew",
-                                          json={"expires_at": time.time() + 10}, headers={"X-CSRF-Token": csrf}))
+                    assert next(m for m in dashboard()["members"] if m["id"] == delegated_request["member_id"])["expires_at"] is None
                     time.sleep(12)
-                    assert business.get("/api/v1/auth/me", headers={
-                        "Authorization": "Bearer " + delegated_login["access_token"]}).status_code in (401, 403)
-                    results.append("whitelist expiry denies an already-issued session without a new application")
+                    delegated_headers = {"Authorization": "Bearer " + delegated_login["access_token"]}
+                    assert business.get("/api/v1/auth/me", headers=delegated_headers).status_code == 200
+                    results.append("membership is permanent while the independent worker refreshes short authorization leases")
+                    direct_fresh = require(business.post("/api/v1/auth/login", json={
+                        "email": direct_email, "password": reset_password}))["data"]
+                    removal = {"member_ids": [delegated_request["member_id"], direct_row["member_id"]],
+                               "note": "isolated atomic batch deletion", "confirmed": True}
+                    removed = require(security.post("/api/lab/admin/members/batch-delete", json=removal,
+                                                     headers={"X-CSRF-Token": csrf}))
+                    assert removed["deleted"] == 2
+                    assert require(security.post("/api/lab/admin/members/batch-delete", json=removal,
+                                                  headers={"X-CSRF-Token": csrf}))["deleted"] == 0
+                    for token_headers in (delegated_headers, {"Authorization": "Bearer " + direct_fresh["access_token"]}):
+                        wait_for(lambda: business.get("/api/v1/auth/me", headers=token_headers).status_code in (401, 403))
+                    assert business.post("/api/v1/auth/refresh", json={
+                        "refresh_token": delegated_login["refresh_token"]}).status_code >= 400
+                    results.append("atomic batch deletion disables both real candidate accounts and old sessions; repeat delivery is idempotent")
                     (OUTPUT / "isolated-http-results.json").write_text(json.dumps({
                         "started_at": started_at, "run_completed": False, "candidate_image_id": image_id,
                         "synthetic_only": True, "production_changed": False, "real_production_acceptance": False,

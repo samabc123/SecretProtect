@@ -35,6 +35,7 @@ VALIDATION_FIELDS = {
     "person_id": "人员编号", "entry_id": "白名单编号", "application_id": "申请编号",
     "request_id": "申请编号", "is_active": "账号状态",
     "account_id": "平台账号编号", "policy_version": "准入策略版本",
+    "member_ids": "白名单人员列表",
 }
 
 

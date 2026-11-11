@@ -10,7 +10,7 @@ import re
 import sqlite3
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
@@ -21,7 +21,7 @@ from .auth import safe_validation_detail
 from .auth_store import AuthError
 from .config import ROOT
 from .frontend_shell import render_vue_app
-from .samlab_admission import SamlabAdmissionStore
+from .samlab_admission import MAX_BULK_MEMBERS, SamlabAdmissionStore
 from .security_policy import require_permission
 from . import roster_import
 
@@ -42,7 +42,6 @@ class Application(Body):
 
 class Review(Body):
     decision: Literal["approved", "rejected"]
-    expires_at: float | None = None
 
 
 class AdminProvision(Body):
@@ -61,8 +60,9 @@ class Removal(Body):
     confirmed: StrictBool
 
 
-class Renewal(Body):
-    expires_at: float
+class BatchRemoval(Removal):
+    member_ids: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
+        min_length=1, max_length=MAX_BULK_MEMBERS)
 
 
 class ImportCommit(Body):
@@ -162,13 +162,9 @@ def install_admission(app: FastAPI):
             "platform_connected": False, "mode": "isolated_candidate",
         }}
 
-    @app.post("/api/lab/admin/members/{member_id}/renew")
-    def renew(member_id: str, body: Renewal, actor: str = Depends(admin)):
-        return store.renew(member_id, actor, body.expires_at)
-
     @app.get("/api/lab/admin/roster/template")
     def roster_template(actor: str = Depends(admin)):
-        return Response("\ufeff邮箱,用户名,有效期\r\n", media_type="text/csv; charset=utf-8",
+        return Response("\ufeff邮箱,用户名\r\n", media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="samlab-roster.csv"',
                                  "Cache-Control": "no-store"})
 
@@ -192,21 +188,19 @@ def install_admission(app: FastAPI):
 
     @app.post("/api/lab/admin/requests/{request_id}/review")
     def review(request_id: str, body: Review, actor: str = Depends(admin)):
-        return store.review(request_id, body.decision, actor, body.expires_at)
+        return store.review(request_id, body.decision, actor)
 
-    @app.post("/api/lab/admin/members/{member_id}/revoke")
-    def revoke(member_id: str, body: Removal, actor: str = Depends(admin)):
+    @app.post("/api/lab/admin/members/batch-delete")
+    def batch_delete(body: BatchRemoval, actor: str = Depends(admin)):
         if not body.confirmed:
-            raise AuthError("请确认撤销该人员准入。")
-        store.revoke(member_id, actor, body.note, delete=False)
-        return {"message": "准入已撤销；真实平台停用结果仍需平台回执。"}
+            raise AuthError("请确认删除所选白名单人员。")
+        return store.delete_members(body.member_ids, actor, body.note)
 
     @app.post("/api/lab/admin/members/{member_id}/delete")
     def delete(member_id: str, body: Removal, actor: str = Depends(admin)):
         if not body.confirmed:
             raise AuthError("请确认删除该白名单人员。")
-        store.revoke(member_id, actor, body.note, delete=True)
-        return {"message": "已移出白名单并保留审计；真实平台停用结果仍需平台回执。"}
+        return store.delete_members([member_id], actor, body.note)
 
     @app.post(PREFIX + "/requests")
     async def receive(raw: bytes = Depends(service)):

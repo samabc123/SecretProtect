@@ -8,15 +8,13 @@ import json
 import secrets
 import time
 import uuid
-from datetime import datetime, timezone
 
 from .auth_store import AuthError
 from .samlab_admission import EMAIL
 
 MAX_BYTES = 1024 * 1024
 MAX_ROWS = 2000
-HEADERS = {"邮箱": "email", "email": "email", "用户名": "username", "username": "username",
-           "有效期": "expires_at", "expires_at": "expires_at"}
+HEADERS = {"邮箱": "email", "email": "email", "用户名": "username", "username": "username"}
 
 
 def initialize(c):
@@ -42,14 +40,14 @@ def parse_csv(raw: bytes):
         header = next(reader)
         columns = [HEADERS.get(value.strip().lower()) for value in header]
         if not columns or None in columns or len(set(columns)) != len(columns) or "email" not in columns:
-            raise AuthError("表头必须包含“邮箱”；仅支持“邮箱、用户名、有效期”，不接受密码或学号列。")
+            raise AuthError("表头必须包含“邮箱”；仅支持“邮箱、用户名”。白名单永久有效，不接受有效期、密码或学号列。")
         rows = []
         for values in reader:
             if not values or not any(value.strip() for value in values):
                 continue
             if len(rows) >= MAX_ROWS:
                 raise AuthError("每次最多导入 2000 人。")
-            row = {"line": reader.line_num, "email": "", "username": "", "expires_at": None, "error": ""}
+            row = {"line": reader.line_num, "email": "", "username": "", "error": ""}
             if len(values) != len(columns):
                 row["error"] = "列数与表头不一致。"
             else:
@@ -59,16 +57,6 @@ def parse_csv(raw: bytes):
                     row["error"] = "邮箱格式无效或超过 180 个字符。"
                 elif len(row["username"]) > 100 or any(ord(ch) < 32 for ch in row["username"]) or row["username"].startswith(("=", "+", "-", "@")):
                     row["error"] = "用户名须在 100 个字符以内，不能含控制符或公式前缀。"
-                if data.get("expires_at"):
-                    try:
-                        value = datetime.fromisoformat(data["expires_at"].replace("Z", "+00:00"))
-                        if value.tzinfo is None:
-                            raise ValueError()
-                        row["expires_at"] = value.astimezone(timezone.utc).timestamp()
-                        if row["expires_at"] <= time.time():
-                            raise ValueError()
-                    except (ValueError, OverflowError):
-                        row["error"] = "有效期须为未来的 ISO 8601 时间，并包含时区，例如 2027-01-01T00:00:00+08:00。"
             rows.append(row)
     except (csv.Error, StopIteration):
         raise AuthError("CSV 文件为空或格式不正确。") from None
@@ -84,12 +72,12 @@ def classify(c, rows):
         email = item["email"]
         if item["error"]:
             item["state"], item["message"] = "error", item["error"]
-        elif item["expires_at"] is not None and item["expires_at"] <= time.time():
-            item["state"], item["message"] = "error", "有效期已经到期。"
+        elif item.get("expires_at") is not None:
+            item["state"], item["message"] = "error", "旧预览包含有效期，请使用永久名单模板重新预览。"
         elif email in seen:
             item["state"], item["message"] = "skip", "文件内邮箱重复。"
         elif c.execute("SELECT 1 FROM samlab_members WHERE email=?", (email,)).fetchone():
-            item["state"], item["message"] = "skip", "邮箱已有白名单记录，保留原状态、有效期和账号绑定。"
+            item["state"], item["message"] = "skip", "邮箱已有白名单记录，保留原状态和账号绑定。"
         else:
             item["state"], item["message"] = "add", "新增名单；已有申请仍需管理员确认。"
         seen.add(email)
@@ -137,9 +125,9 @@ def commit(store, batch_id, actor):
                 continue
             member_id = str(uuid.uuid4())
             c.execute("INSERT INTO samlab_members(id,person_no,username,email,status,created_at,updated_at,"
-                      "expires_at,source,display_username) VALUES (?,?,?,?,'active',?,?,?,'roster',?)",
+                      "source,display_username) VALUES (?,?,?,?,'active',?,?,'roster',?)",
                       (member_id, f"member:{member_id}", f"roster_{uuid.uuid4().hex}", item["email"],
-                       now, now, item["expires_at"], item["username"] or None))
+                       now, now, item["username"] or None))
             store._audit(c, actor, "whitelist.imported", member_id, f"CSV 批次 {batch_id}；不代表邮箱验证或账号已开通。")
         result = {"batch_id": batch_id, "summary": summary(items), "rows": items}
         store._audit(c, actor, "roster.import.committed", batch_id, json.dumps(result["summary"]))

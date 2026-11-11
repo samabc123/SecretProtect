@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import re
 import sqlite3
 import time
@@ -16,6 +15,7 @@ from .auth_store import AuthError, USERNAME
 PLATFORM = {"id": "samlab", "name": "Samlab", "url": "https://researchchat.samlab.cn/"}
 REQUEST_ID = re.compile(r"[A-Za-z0-9_-]{1,100}\Z")
 EMAIL = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}\Z")
+MAX_BULK_MEMBERS = 500
 
 
 class SamlabAdmissionStore:
@@ -90,6 +90,31 @@ class SamlabAdmissionStore:
                     c.execute(f"ALTER TABLE {table} ADD COLUMN display_username TEXT")
             from .roster_import import initialize
             initialize(c)
+            self._migrate_permanent(c)
+
+    def _migrate_permanent(self, c):
+        # Keep legacy columns for backup compatibility, but never restore expired or removed access.
+        c.execute("BEGIN IMMEDIATE")
+        c.execute("CREATE TABLE IF NOT EXISTS samlab_schema_migrations "
+                  "(id TEXT PRIMARY KEY, applied_at REAL NOT NULL)")
+        migration = "permanent-membership-v1"
+        if c.execute("SELECT 1 FROM samlab_schema_migrations WHERE id=?", (migration,)).fetchone():
+            return
+        now = time.time()
+        for row in c.execute("SELECT * FROM samlab_members WHERE deleted_at IS NULL").fetchall():
+            if row["status"] == "revoked" or (row["expires_at"] is not None and row["expires_at"] <= now):
+                c.execute("UPDATE samlab_members SET status='revoked',deleted_at=?,expires_at=NULL,"
+                          "policy_version=policy_version+1,sync_state='pending_revoke',updated_at=? WHERE id=?",
+                          (now, now, row["id"]))
+                self._audit(c, "system:migration", "whitelist.legacy_deleted", row["id"],
+                            "合并历史撤销、到期与删除状态，未恢复准入。")
+            elif row["expires_at"] is not None:
+                c.execute("UPDATE samlab_members SET expires_at=NULL,policy_version=policy_version+1,"
+                          "sync_state='pending_create',updated_at=? WHERE id=?", (now, row["id"]))
+                self._audit(c, "system:migration", "whitelist.permanent_enabled", row["id"],
+                            "有效人员改为永久白名单；原有效期 " + str(row["expires_at"]))
+        c.execute("UPDATE samlab_members SET expires_at=NULL WHERE expires_at IS NOT NULL")
+        c.execute("INSERT INTO samlab_schema_migrations VALUES (?,?)", (migration, now))
 
     @staticmethod
     def _audit(c, actor, action, subject, note=""):
@@ -161,7 +186,6 @@ class SamlabAdmissionStore:
                         raise AuthError("该记录已绑定其他管理员创建内容。", 409)
                     # Delivery retries cannot undo a later revocation or logical deletion.
                     return self._status(c, request_id)
-                self._expire(c)
                 now, member_id = time.time(), str(uuid.uuid4())
                 imported = c.execute("SELECT * FROM samlab_members WHERE email=?", (email,)).fetchone()
                 if imported:
@@ -188,47 +212,31 @@ class SamlabAdmissionStore:
             raise AuthError("人员或账号映射已存在，未覆盖原准入策略。", 409) from None
 
     @staticmethod
-    def _expire(c):
-        now = time.time()
-        rows = c.execute("SELECT id FROM samlab_members WHERE status='active' AND "
-                         "expires_at IS NOT NULL AND expires_at<=?", (now,)).fetchall()
-        for row in rows:
-            updated = c.execute("UPDATE samlab_members SET status='revoked',policy_version=policy_version+1,"
-                                "sync_state='pending_revoke',updated_at=? WHERE id=? AND status='active'",
-                                (now, row["id"]))
-            if updated.rowcount:
-                SamlabAdmissionStore._audit(c, "system:expiry", "whitelist.expired", row["id"])
-
-    @staticmethod
     def _status(c, request_id: str):
-        SamlabAdmissionStore._expire(c)
         request = c.execute("SELECT * FROM samlab_requests WHERE request_id=?", (request_id,)).fetchone()
         if not request:
             raise AuthError("申请不存在。", 404)
         member = c.execute("SELECT * FROM samlab_members WHERE id=?", (request["member_id"],)).fetchone()
         allowed = bool(request["status"] == "approved" and member and member["status"] == "active"
-                       and member["deleted_at"] is None
-                       and (member["expires_at"] is None or member["expires_at"] > time.time()))
+                       and member["deleted_at"] is None)
         return {
             "request_id": request_id, "decision": request["status"], "allowed": allowed,
             "member_id": member["id"] if member else None,
             "policy_version": member["policy_version"] if member else 0,
             "account_id": member["account_id"] if member else None,
             "account_state": member["sync_state"] if member else "not_created",
-            "expires_at": member["expires_at"] if member else None,
+            "expires_at": None,
             # A worker must refresh this lease; a cached approval is not permanent authority.
-            "valid_until": min(time.time() + 15, member["expires_at"] or float("inf")) if allowed else 0,
+            "valid_until": time.time() + 15 if allowed else 0,
         }
 
     def status(self, request_id):
         with self.connect() as c:
             return self._status(c, request_id)
 
-    def review(self, request_id: str, decision: str, actor: str, expires_at=None):
+    def review(self, request_id: str, decision: str, actor: str):
         if decision not in {"approved", "rejected"}:
             raise AuthError("请选择同意或不同意。")
-        if expires_at is not None and (not math.isfinite(expires_at) or expires_at <= time.time()):
-            raise AuthError("白名单有效期必须晚于当前时间。")
         try:
             with self.connect() as c:
                 c.execute("BEGIN IMMEDIATE")
@@ -241,7 +249,6 @@ class SamlabAdmissionStore:
                     raise AuthError("该申请已处理，不能覆盖原审批。", 409)
                 member_id = None
                 if decision == "approved":
-                    self._expire(c)
                     existing = c.execute("SELECT * FROM samlab_members WHERE email=?", (row["email"],)).fetchone()
                     if existing:
                         member_id = existing["id"]
@@ -250,26 +257,23 @@ class SamlabAdmissionStore:
                                     "SELECT 1 FROM samlab_requests WHERE member_id=?", (existing["id"],)).fetchone():
                                 raise AuthError("该邮箱已绑定账号，请使用原账号或由管理员核实迁移。", 409)
                             if existing["status"] != "active" or existing["deleted_at"] is not None:
-                                raise AuthError("导入人员已撤销、删除或到期，请先核实准入，不能直接恢复。", 409)
-                            effective_expiry = existing["expires_at"]
-                            if expires_at is not None:
-                                effective_expiry = min(effective_expiry, expires_at) if effective_expiry else expires_at
-                            c.execute("UPDATE samlab_members SET username=?,display_username=?,expires_at=?,"
+                                raise AuthError("导入人员已删除，请先核实准入，不能直接恢复。", 409)
+                            c.execute("UPDATE samlab_members SET username=?,display_username=?,expires_at=NULL,"
                                       "policy_version=policy_version+1,sync_state='pending_create',updated_at=? WHERE id=?",
-                                      (row["username"], row["username"], effective_expiry, time.time(), member_id))
+                                      (row["username"], row["username"], time.time(), member_id))
                         else:
                             if existing["username"].lower() != row["username"].lower():
                                 raise AuthError("邮箱已关联其他用户名，请先核实人员绑定。", 409)
                             if existing["status"] == "active" and existing["deleted_at"] is None:
                                 raise AuthError("该人员已在白名单内，请使用原账号。", 409)
-                            c.execute("UPDATE samlab_members SET status='active',deleted_at=NULL,expires_at=?,"
+                            c.execute("UPDATE samlab_members SET status='active',deleted_at=NULL,expires_at=NULL,"
                                       "policy_version=policy_version+1,sync_state='pending_create',updated_at=? WHERE id=?",
-                                      (expires_at, time.time(), member_id))
+                                      (time.time(), member_id))
                     else:
                         member_id = str(uuid.uuid4())
-                        c.execute("INSERT INTO samlab_members(id,person_no,username,email,status,expires_at,created_at,updated_at)"
-                                  " VALUES (?,?,?,?,'active',?,?,?)",
-                                  (member_id, row["person_no"], row["username"], row["email"], expires_at, time.time(), time.time()))
+                        c.execute("INSERT INTO samlab_members(id,person_no,username,email,status,created_at,updated_at)"
+                                  " VALUES (?,?,?,?,'active',?,?)",
+                                  (member_id, row["person_no"], row["username"], row["email"], time.time(), time.time()))
                     self._audit(c, actor, "whitelist.approved", member_id, "管理员批准 Samlab 注册准入；不等于实名认证。")
                 c.execute("UPDATE samlab_requests SET status=?,member_id=?,reviewed_at=?,reviewed_by=? WHERE request_id=?",
                           (decision, member_id, time.time(), actor, request_id))
@@ -278,20 +282,33 @@ class SamlabAdmissionStore:
         except sqlite3.IntegrityError:
             raise AuthError("用户名或邮箱已绑定其他人员，批准未生效。", 409) from None
 
-    def revoke(self, member_id: str, actor: str, note: str, delete: bool):
+    def delete_members(self, member_ids: list[str], actor: str, note: str):
+        if (not isinstance(member_ids, list) or not 1 <= len(member_ids) <= MAX_BULK_MEMBERS
+                or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in member_ids)):
+            raise AuthError(f"请选择 1 至 {MAX_BULK_MEMBERS} 名白名单人员。")
         if not 5 <= len(note.strip()) <= 500:
-            raise AuthError("撤销或删除原因须为 5 至 500 个字符。")
+            raise AuthError("删除原因须为 5 至 500 个字符。")
+        member_ids = list(dict.fromkeys(member_ids))
         with self.connect() as c:
             c.execute("BEGIN IMMEDIATE")
-            row = c.execute("SELECT * FROM samlab_members WHERE id=?", (member_id,)).fetchone()
-            if not row:
-                raise AuthError("白名单人员不存在。", 404)
-            if row["deleted_at"] is not None or (row["status"] == "revoked" and not delete):
-                raise AuthError("该人员已撤销或删除，请刷新列表。", 409)
-            c.execute("UPDATE samlab_members SET status='revoked',deleted_at=?,policy_version=policy_version+1,"
-                      "sync_state='pending_revoke',updated_at=? WHERE id=?",
-                      (time.time() if delete else None, time.time(), member_id))
-            self._audit(c, actor, "whitelist.deleted" if delete else "whitelist.revoked", member_id, note.strip())
+            placeholders = ",".join("?" for _ in member_ids)
+            rows = c.execute(f"SELECT * FROM samlab_members WHERE id IN ({placeholders})", member_ids).fetchall()
+            if len(rows) != len(member_ids):
+                raise AuthError("部分白名单人员不存在，本次未删除任何人员，请刷新列表。", 404)
+            now, deleted = time.time(), 0
+            for row in rows:
+                if row["deleted_at"] is not None:
+                    continue
+                c.execute("UPDATE samlab_members SET status='revoked',deleted_at=?,expires_at=NULL,"
+                          "policy_version=policy_version+1,sync_state='pending_revoke',updated_at=? WHERE id=?",
+                          (now, now, row["id"]))
+                self._audit(c, actor, "whitelist.deleted", row["id"], note.strip())
+                deleted += 1
+            if deleted and len(member_ids) > 1:
+                self._audit(c, actor, "whitelist.batch_deleted", str(uuid.uuid4()),
+                            f"删除 {deleted} 人，已删除跳过 {len(rows) - deleted} 人；" + note.strip())
+            return {"deleted": deleted, "already_deleted": len(rows) - deleted,
+                    "message": f"已删除 {deleted} 人，已删除跳过 {len(rows) - deleted} 人；保留审计，关联账号停用以平台回执为准。"}
 
     def acknowledge(self, request_id: str, account_id: str, policy_version: int, state: str):
         if not 1 <= len(account_id) <= 128 or any(ord(char) < 33 or ord(char) > 126 for char in account_id):
@@ -319,21 +336,6 @@ class SamlabAdmissionStore:
         except sqlite3.IntegrityError:
             raise AuthError("该平台账号已经绑定其他人员。", 409) from None
 
-    def renew(self, member_id: str, actor: str, expires_at: float):
-        if not math.isfinite(expires_at) or expires_at <= time.time():
-            raise AuthError("续期时间必须晚于当前时间。")
-        with self.connect() as c:
-            c.execute("BEGIN IMMEDIATE")
-            self._expire(c)
-            row = c.execute("SELECT * FROM samlab_members WHERE id=?", (member_id,)).fetchone()
-            if not row or row["deleted_at"] is not None or row["status"] != "active":
-                raise AuthError("仅可续期有效人员；已撤销或到期人员须重新核验。", 409)
-            c.execute("UPDATE samlab_members SET expires_at=?,policy_version=policy_version+1,"
-                      "sync_state='pending_create',updated_at=? WHERE id=?",
-                      (expires_at, time.time(), member_id))
-            self._audit(c, actor, "whitelist.renewed", member_id)
-        return {"message": "已续期，等待平台同步新策略。"}
-
     def health(self):
         with self.connect() as c:
             row = c.execute("SELECT last_seen FROM samlab_service_health WHERE id=1").fetchone()
@@ -342,7 +344,6 @@ class SamlabAdmissionStore:
 
     def dashboard(self):
         with self.connect() as c:
-            self._expire(c)
             legacy_tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             legacy_count = c.execute("SELECT COUNT(*) FROM lab_people").fetchone()[0] if "lab_people" in legacy_tables else 0
             members = []
@@ -352,7 +353,6 @@ class SamlabAdmissionStore:
                     item["username"] = item["display_username"] or ("未注册" if item["source"] == "roster" else item["username"])
                     if item["person_no"].startswith("account:"):
                         item["person_no"] = ""
-                item["expired"] = bool(row["expires_at"] is not None and row["expires_at"] <= time.time())
                 item["awaiting_registration"] = item["source"] == "roster" and not c.execute(
                     "SELECT 1 FROM samlab_requests WHERE member_id=?", (item["id"],)).fetchone()
                 members.append(item)
@@ -365,7 +365,7 @@ class SamlabAdmissionStore:
                         item["person_no"] = ""
                 item["roster_match"] = bool(c.execute(
                     "SELECT 1 FROM samlab_members WHERE email=? AND source='roster' AND status='active' "
-                    "AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>?)", (item["email"], time.time())).fetchone())
+                    "AND deleted_at IS NULL", (item["email"],)).fetchone())
                 requests.append(item)
             return {
                 "platform": PLATFORM,
