@@ -54,12 +54,52 @@ def assert_dialog_fit(page, dialog):
     footer = dialog.locator(".el-dialog__footer").bounding_box()
     assert footer and footer["y"] + footer["height"] <= page.viewport_size["height"], "Dialog footer not reachable"
 
+def verify_roster_id_backfill(page, admission, origin):
+    member_id, email = "synthetic-legacy-roster-id", "legacy-id@example.edu"
+    with admission.connect() as c:
+        c.execute("INSERT INTO samlab_members(id,person_no,username,email,status,source,"
+                  "display_username,created_at,updated_at) VALUES (?,?,?,?,'active','roster',?,?,?)",
+                  (member_id, "member:" + member_id, "roster_legacy_id", email,
+                   "旧名单人员", time.time(), time.time()))
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/admission")
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.get_by_role("row").filter(has_text=email).get_by_text("尚未关联", exact=True)).to_be_visible()
+    page.get_by_role("button", name="导入名单", exact=True).click()
+    dialog = page.get_by_role("dialog", name="导入实验室名单", exact=True)
+    dialog.get_by_label("名单文件", exact=True).set_input_files({
+        "name": "legacy-backfill.csv", "mimeType": "text/csv",
+        "buffer": f"用户名,邮箱,ID\n旧名单人员,{email},802\n".encode("utf-8-sig"),
+    })
+    expect(dialog.get_by_role("cell").get_by_text("补录 ID", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
+    page.screenshot(path=str(OUTPUT / "roster-id-backfill-desktop.png"), full_page=True)
+    dialog.get_by_role("button", name="确认导入", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    expect(page.get_by_role("row").filter(has_text=email).get_by_text("802", exact=True)).to_be_visible()
+    members = admission.dashboard()["members"]
+    assert len(members) == 1 and members[0]["id"] == member_id and members[0]["account_id"] == "802"
+    assert members[0]["synced_version"] == 0
+    page.reload()
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.get_by_role("row").filter(has_text=email).get_by_text("802", exact=True)).to_be_visible()
+    page.get_by_role("button", name="导入名单", exact=True).click()
+    dialog.get_by_label("名单文件", exact=True).set_input_files({
+        "name": "legacy-duplicate.csv", "mimeType": "text/csv",
+        "buffer": f"username,email,id\n旧名单人员,{email},802\n".encode("utf-8-sig"),
+    })
+    expect(dialog.get_by_role("cell").get_by_text("跳过", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
+    dialog.get_by_role("button", name="取消", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    admission.delete_members([member_id], "synthetic-browser", "清理合成补录测试人员")
+
 
 def verify_responsive_layout(page, admission, origin):
     long_email = "long-address-" + "x" * 46 + "@" + "lab-" + "a" * 40 + "." + "b" * 40 + ".example.edu"
-    rows = [f"layout-{index:02d}@example.edu,布局测试人员{index:02d}" for index in range(44)]
-    rows.append(f"{long_email}," + "长姓名验证" * 20)
-    batch = preview(admission, ("邮箱,用户名\n" + "\n".join(rows) + "\n").encode("utf-8"), "synthetic-layout")
+    rows = [f"layout-{index:02d}@example.edu,布局测试人员{index:02d},{index + 1000}" for index in range(44)]
+    rows.append(f"{long_email}," + "长姓名验证" * 20 + ",9223372036854775807")
+    batch = preview(admission, ("邮箱,用户名,ID\n" + "\n".join(rows) + "\n").encode("utf-8"), "synthetic-layout")
     assert batch["summary"]["error"] == 0
     commit(admission, batch["batch_id"], "synthetic-layout")
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -73,6 +113,8 @@ def verify_responsive_layout(page, admission, origin):
         exported_rows = list(csv.reader(stream))
     assert len(exported_rows) == 46, "Export must include all filtered records, not only the current page"
     assert exported_rows[0][0:2] == ["邮箱", "用户名"]
+    id_index = exported_rows[0].index("平台账号编号")
+    assert {row[id_index] for row in exported_rows[1:]} == {str(index + 1000) for index in range(44)} | {"9223372036854775807"}
     assert "平台状态" not in exported_rows[0] and "加入时间" not in exported_rows[0]
     for label in ("平台状态", "加入时间"):
         expect(page.get_by_role("columnheader", name=label, exact=True)).to_have_count(0)
@@ -348,21 +390,35 @@ def main():
                     with page.expect_download() as download:
                         import_dialog.get_by_role("button", name="下载 CSV 模板", exact=True).click()
                     assert download.value.suggested_filename == "samlab-roster.csv"
+                    assert download.value.path().read_text(encoding="utf-8-sig") == "用户名,邮箱,ID\n"
+                    import_dialog.get_by_label("名单文件", exact=True).set_input_files({
+                        "name": "old-template.csv", "mimeType": "text/csv",
+                        "buffer": "邮箱,用户名\nroster-browser@example.edu,导入人员\n".encode("utf-8-sig"),
+                    })
+                    expect(import_dialog.get_by_text("表头须包含", exact=False)).to_be_visible()
+                    expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
                     import_dialog.get_by_label("名单文件", exact=True).set_input_files({
                         "name": "invalid.csv", "mimeType": "text/csv",
-                        "buffer": "邮箱,用户名\ninvalid-email,错误数据\n".encode("utf-8-sig"),
+                        "buffer": "用户名,邮箱,ID\n错误数据,invalid-email,801\n".encode("utf-8-sig"),
                     })
                     expect(import_dialog.get_by_role("cell").filter(has_text="邮箱格式无效或超过 180 个字符。")).to_be_visible()
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
                     import_dialog.get_by_label("名单文件", exact=True).set_input_files({
+                        "name": "id-conflict.csv", "mimeType": "text/csv",
+                        "buffer": "用户名,邮箱,ID\n甲,a@example.edu,801\n乙,b@example.edu,801\n".encode("utf-8-sig"),
+                    })
+                    expect(import_dialog.get_by_role("cell").filter(has_text="文件内同一平台 ID 对应多个邮箱。")).to_be_visible()
+                    expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
+                    import_dialog.get_by_label("名单文件", exact=True).set_input_files({
                         "name": "lab-roster.csv", "mimeType": "text/csv",
-                        "buffer": "邮箱,用户名\nroster-browser@example.edu,导入人员\nroster-browser@example.edu,重复行\n".encode("utf-8-sig"),
+                        "buffer": "用户名,邮箱,ID\n导入人员,roster-browser@example.edu,801\n导入人员,roster-browser@example.edu,801\n".encode("utf-8-sig"),
                     })
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
                     page.screenshot(path=str(OUTPUT / "roster-import-desktop.png"), full_page=True)
                     page.set_viewport_size({"width": 390, "height": 844})
                     expect(import_dialog.get_by_text("新增", exact=True)).to_be_visible()
                     expect(import_dialog.get_by_text("跳过", exact=True)).to_be_visible()
+                    expect(import_dialog.get_by_role("list", name="名单导入预览").get_by_text("801", exact=True)).to_have_count(2)
                     assert_dialog_fit(page, import_dialog)
                     page.screenshot(path=str(OUTPUT / "roster-import-mobile.png"), full_page=True)
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Import dialog mobile overflow"
@@ -370,9 +426,12 @@ def main():
                     expect(import_dialog).not_to_be_visible()
                     expect(page.get_by_role("tabpanel", name="白名单").get_by_text("roster-browser@example.edu", exact=True)).to_be_visible()
                     imported_member = next(row for row in admission.dashboard()["members"] if row["email"] == "roster-browser@example.edu")
-                    assert imported_member["awaiting_registration"] and not imported_member["account_id"]
-                    results.append("CSV template download, invalid-row rejection, duplicate preview and actual import; desktop/mobile fit; no fake account opening")
+                    assert imported_member["awaiting_registration"] and imported_member["account_id"] == "801"
+                    assert imported_member["sync_state"] == "pending_create" and imported_member["synced_version"] == 0
+                    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("801", exact=True)).to_be_visible()
+                    results.append("Three-column CSV template; old-format/invalid-email/ID-conflict rejection; exact duplicates skipped; imported platform ID persisted and displayed on desktop/mobile without claiming remote verification")
                     page.set_viewport_size({"width": 1440, "height": 1000})
+                    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("801", exact=True)).to_be_visible()
                     page.get_by_role("tab", name="注册申请", exact=False).click()
                     page.get_by_role("row").filter(has_text="student01@example.edu").get_by_role("button", name="审批").click()
                     dialog = page.get_by_role("dialog", name="注册准入审批")
@@ -443,6 +502,8 @@ def main():
                     expect(dialog).not_to_be_visible()
                     expect(page.get_by_role("row").filter(has_text="student02@example.edu").get_by_text("不同意", exact=True)).to_be_visible()
                     results.append("rejection without free-text note")
+                    verify_roster_id_backfill(page, admission, origin)
+                    results.append("legacy roster ID-only backfill is enabled with zero new rows; same member ID retained, platform ID survives reload, repeated complete import is skipped")
                     page.goto(origin + "/administrators")
                     expect(page.get_by_role("heading", name="管理员", exact=True, level=2)).to_be_visible()
                     page.get_by_role("button", name="创建管理员", exact=True).click()

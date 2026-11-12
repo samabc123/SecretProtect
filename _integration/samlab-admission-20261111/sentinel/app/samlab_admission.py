@@ -189,7 +189,7 @@ class SamlabAdmissionStore:
                 now, member_id = time.time(), str(uuid.uuid4())
                 imported = c.execute("SELECT * FROM samlab_members WHERE email=?", (email,)).fetchone()
                 if imported:
-                    if (imported["source"] != "roster" or imported["account_id"] is not None
+                    if (imported["source"] != "roster" or imported["account_id"] not in (None, account_id)
                             or imported["status"] != "active" or imported["deleted_at"] is not None
                             or c.execute("SELECT 1 FROM samlab_requests WHERE member_id=?", (imported["id"],)).fetchone()):
                         raise AuthError("邮箱已有绑定或准入已失效，未覆盖原策略。", 409)

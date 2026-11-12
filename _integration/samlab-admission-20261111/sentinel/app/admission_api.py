@@ -164,7 +164,7 @@ def install_admission(app: FastAPI):
 
     @app.get("/api/lab/admin/roster/template")
     def roster_template(actor: str = Depends(admin)):
-        return Response("\ufeff邮箱,用户名\r\n", media_type="text/csv; charset=utf-8",
+        return Response("\ufeff用户名,邮箱,ID\r\n", media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="samlab-roster.csv"',
                                  "Cache-Control": "no-store"})
 

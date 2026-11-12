@@ -73,10 +73,20 @@ revision does not claim complete detection coverage or production integration.
 
 ## Permanent Roster
 
-Roster CSV files contain mandatory `email` / `邮箱` and optional `username` /
-`用户名` columns. Passwords, student numbers and expiry columns are rejected.
-Imported emails still require an administrator's approval of the actual
-registration request; import does not verify mailbox ownership.
+Roster CSV files require `username` / `用户名`, `email` / `邮箱` and `id` / `ID`
+columns, in any order. ID is the existing Samlab user ID (a positive signed
+64-bit integer), not the security service's member ID. Passwords, student
+numbers and expiry columns are rejected. Imported IDs are displayed in the
+whitelist but do not verify mailbox ownership, provision accounts or confirm
+remote account status.
+
+Reimport can fill a missing platform ID on an active, unlinked legacy roster
+entry, without adding another person. It cannot replace an existing account
+mapping, reuse a deleted member's ID or restore deleted access. Same-file
+mapping conflicts block the entire batch; exact duplicates are skipped.
+Only a matching signed platform administrator delivery can associate an
+imported account with the service workflow. New registration cannot claim an
+existing imported account by matching its email.
 
 Whitelist membership is permanent until explicitly removed. Approval, account
 creation, login and API access remain distinct operations. Session expiry,
