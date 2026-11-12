@@ -549,7 +549,7 @@ class AdmissionTests(unittest.TestCase):
     def test_roster_preview_commit_deduplicates_and_is_idempotent(self):
         preview = self.preview_roster("用户名,邮箱,ID\n张三,A@example.edu,101\n张三,a@example.edu,101\n李四,b@example.edu,102\n")
         self.assertEqual(preview.status_code, 200, preview.text)
-        self.assertEqual(preview.json()["summary"], {"add": 2, "update": 0, "skip": 1, "error": 0})
+        self.assertEqual(preview.json()["summary"], {"add": 2, "update": 0, "restore": 0, "skip": 1, "error": 0})
         self.assertEqual(self.store.dashboard()["members"], [])
         body = {"batch_id": preview.json()["batch_id"]}
         first = self.write("/api/lab/admin/roster/commit", body)
@@ -591,13 +591,142 @@ class AdmissionTests(unittest.TestCase):
             self.login(other, "import_operator")
             self.assertEqual(self.write("/api/lab/admin/roster/commit", {"batch_id": batch_id}, other).status_code, 404)
 
-    def test_roster_reimport_cannot_restore_revoked_or_deleted_people(self):
+    def test_roster_reimport_restores_deleted_person_once_and_preserves_identity_and_audit(self):
         self.import_roster("email,username,id\na@example.edu,测试,101\n")
         member = self.store.dashboard()["members"][0]
         self.store.delete_members([member["id"]], "user:admin", "已确认人员离组")
-        result = self.import_roster("email,username,id\na@example.edu,测试,101\n")
-        self.assertEqual(result["summary"], {"add": 0, "update": 0, "skip": 1, "error": 0})
         self.assertEqual(self.store.dashboard()["members"], [])
+        staged = self.preview_roster("用户ID,邮箱,用户名\n101,a@example.edu,测试\n101,a@example.edu,测试\n").json()
+        self.assertEqual(staged["summary"], {"add": 0, "update": 0, "restore": 1, "skip": 1, "error": 0})
+        self.assertEqual(self.store.dashboard()["members"], [], "Preview must not restore access")
+        body = {"batch_id": staged["batch_id"]}
+        first = self.write("/api/lab/admin/roster/commit", body)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json(), self.write("/api/lab/admin/roster/commit", body).json())
+        data = self.store.dashboard()
+        self.assertEqual(len(data["members"]), 1)
+        restored = data["members"][0]
+        for key in ("id", "person_no", "username", "email", "account_id", "created_at", "source"):
+            self.assertEqual(restored[key], member[key], key)
+        self.assertEqual((restored["status"], restored["deleted_at"], restored["expires_at"]), ("active", None, None))
+        self.assertEqual((restored["policy_version"], restored["sync_state"], restored["synced_version"]),
+                         (3, "pending_create", 0))
+        actions = [a["action"] for a in data["audits"]]
+        self.assertEqual(actions.count("whitelist.deleted"), 1)
+        self.assertEqual(actions.count("whitelist.restored"), 1)
+        audit = next(a for a in data["audits"] if a["action"] == "whitelist.restored")
+        self.assertEqual((audit["subject"], audit["actor"]), (member["id"], "user:admin"))
+        self.assertEqual(self.import_roster("username,email,id\n测试,a@example.edu,101\n")["summary"]["skip"], 1)
+        self.store.delete_members([member["id"]], "user:admin", "再次确认人员离组")
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", body).json(), first.json())
+        self.assertEqual(self.store.dashboard()["members"], [], "Replaying a committed batch must not restore twice")
+
+    def test_roster_restore_preserves_linked_account_and_rejects_old_platform_receipt(self):
+        payload = self.direct_account()
+        original = self.signed("POST", PREFIX + "/admin-provision", payload).json()
+        self.store.acknowledge(payload["request_id"], "123", 1, "active")
+        self.store.delete_members([original["member_id"]], "user:admin", "已确认人员离组")
+        self.store.acknowledge(payload["request_id"], "123", 2, "disabled")
+        result = self.import_roster("username,email,id\n管理员创建用户,admin-created@example.edu,123\n")
+        self.assertEqual(result["summary"]["restore"], 1)
+        restored = self.store.status(payload["request_id"])
+        self.assertTrue(restored["allowed"])
+        self.assertEqual((restored["member_id"], restored["account_id"], restored["policy_version"]),
+                         (original["member_id"], "123", 3))
+        self.assertEqual(restored["account_state"], "pending_create")
+        member = self.store.dashboard()["members"][0]
+        self.assertEqual((member["source"], member["synced_version"]), ("admin_direct", 2))
+        with self.assertRaises(AuthError) as error:
+            self.store.acknowledge(payload["request_id"], "123", 2, "disabled")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertTrue(self.store.acknowledge(payload["request_id"], "123", 3, "active")["allowed"])
+        self.assertEqual(len(self.store.dashboard()["requests"]), 1)
+
+    def test_roster_can_restore_legacy_revoked_status_without_deleted_timestamp(self):
+        self.import_roster("username,email,id\n测试,a@example.edu,101\n")
+        with self.store.connect() as c:
+            c.execute("UPDATE samlab_members SET status='revoked',sync_state='disabled'")
+        result = self.import_roster("username,email,id\n测试,a@example.edu,101\n")
+        self.assertEqual(result["summary"]["restore"], 1)
+        self.assertEqual(self.store.dashboard()["members"][0]["status"], "active")
+
+    def test_roster_restore_conflict_blocks_the_entire_batch(self):
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        member_id = self.store.dashboard()["members"][0]["id"]
+        self.store.delete_members([member_id], "user:admin", "已确认人员离组")
+        for bad_row in ("乙,b@example.edu,101", "甲,a@example.edu,102"):
+            staged = self.preview_roster(
+                f"username,email,id\n甲,a@example.edu,101\n{bad_row}\n丙,c@example.edu,103\n").json()
+            self.assertEqual(staged["summary"]["error"], 1)
+            self.assertEqual(self.write("/api/lab/admin/roster/commit",
+                                        {"batch_id": staged["batch_id"]}).status_code, 409)
+            self.assertEqual(self.store.dashboard()["members"], [])
+        self.assertFalse(any(a["action"] == "whitelist.restored" for a in self.store.dashboard()["audits"]))
+
+    def test_roster_commit_requires_fresh_restore_preview_after_deletion(self):
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        member_id = self.store.dashboard()["members"][0]["id"]
+        staged = self.preview_roster("username,email,id\n甲,a@example.edu,101\n").json()
+        self.assertEqual(staged["summary"]["skip"], 1)
+        self.store.delete_members([member_id], "user:admin", "已确认人员离组")
+        result = self.write("/api/lab/admin/roster/commit", {"batch_id": staged["batch_id"]})
+        self.assertEqual(result.status_code, 409)
+        self.assertIn("重新预览", result.json()["detail"])
+        self.assertEqual(self.store.dashboard()["members"], [])
+        fresh = self.preview_roster("username,email,id\n甲,a@example.edu,101\n").json()["batch_id"]
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        self.store.delete_members([member_id], "user:admin", "再次确认人员离组")
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", {"batch_id": fresh}).status_code, 409)
+        self.assertEqual(self.store.dashboard()["members"], [])
+
+    def test_roster_legacy_preview_cannot_silently_restore_access(self):
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        self.store.delete_members([self.store.dashboard()["members"][0]["id"]], "user:admin", "已确认人员离组")
+        staged = self.preview_roster("username,email,id\n甲,a@example.edu,101\n").json()["batch_id"]
+        with self.store.connect() as c:
+            rows = json.loads(c.execute("SELECT rows_json FROM samlab_import_batches WHERE id=?", (staged,)).fetchone()[0])
+            for row in rows:
+                for key in ("state", "member_id", "policy_version"):
+                    row.pop(key)
+            c.execute("UPDATE samlab_import_batches SET rows_json=? WHERE id=?", (json.dumps(rows), staged))
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", {"batch_id": staged}).status_code, 409)
+        self.assertEqual(self.store.dashboard()["members"], [])
+
+    def test_roster_concurrent_restore_batches_restore_only_once(self):
+        from app.roster_import import commit
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        self.store.delete_members([self.store.dashboard()["members"][0]["id"]], "user:admin", "已确认人员离组")
+        batches = [self.preview_roster("username,email,id\n甲,a@example.edu,101\n").json()["batch_id"] for _ in range(2)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda batch: commit(self.store, batch, "user:admin"), batches))
+        self.assertEqual(sorted(r["summary"]["restore"] for r in results), [0, 1])
+        self.assertEqual(sorted(r["summary"]["skip"] for r in results), [0, 1])
+        self.assertEqual(len(self.store.dashboard()["members"]), 1)
+        self.assertEqual(self.store.dashboard()["members"][0]["policy_version"], 3)
+        self.assertEqual(sum(a["action"] == "whitelist.restored" for a in self.store.dashboard()["audits"]), 1)
+
+    def test_roster_restore_and_new_rows_rollback_together_when_audit_fails(self):
+        self.import_roster("username,email,id\n甲,a@example.edu,101\n")
+        member_id = self.store.dashboard()["members"][0]["id"]
+        self.store.delete_members([member_id], "user:admin", "已确认人员离组")
+        staged = self.preview_roster("username,email,id\n甲,a@example.edu,101\n乙,b@example.edu,102\n").json()["batch_id"]
+        original, calls = self.store._audit, []
+
+        def fail_second(*args):
+            calls.append(1)
+            if len(calls) == 2:
+                raise sqlite3.OperationalError("synthetic audit failure")
+            return original(*args)
+
+        with patch.object(SamlabAdmissionStore, "_audit", side_effect=fail_second):
+            response = self.write("/api/lab/admin/roster/commit", {"batch_id": staged})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.store.dashboard()["members"], [])
+        with self.store.connect() as c:
+            row = c.execute("SELECT * FROM samlab_members WHERE id=?", (member_id,)).fetchone()
+        self.assertEqual((row["status"], row["policy_version"]), ("revoked", 2))
+        self.assertIsNotNone(row["deleted_at"])
+        self.assertFalse(any(a["action"] == "whitelist.restored" for a in self.store.dashboard()["audits"]))
 
     def test_roster_matches_by_email_but_does_not_auto_approve_unverified_applicant(self):
         self.submit()
@@ -729,7 +858,7 @@ class AdmissionTests(unittest.TestCase):
     def test_roster_can_backfill_unlinked_legacy_id_without_creating_or_authorizing_an_account(self):
         member_id = self.legacy_roster()
         preview = self.preview_roster("username,email,id\n旧名单人员,legacy@example.edu,101\n")
-        self.assertEqual(preview.json()["summary"], {"add": 0, "update": 1, "skip": 0, "error": 0})
+        self.assertEqual(preview.json()["summary"], {"add": 0, "update": 1, "restore": 0, "skip": 0, "error": 0})
         body = {"batch_id": preview.json()["batch_id"]}
         first = self.write("/api/lab/admin/roster/commit", body)
         second = self.write("/api/lab/admin/roster/commit", body)
@@ -744,7 +873,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(self.store.dashboard()["requests"], [])
         self.assertEqual(sum(a["action"] == "whitelist.id_imported" for a in self.store.dashboard()["audits"]), 1)
 
-    def test_roster_backfill_cannot_modify_a_reviewed_or_deleted_person(self):
+    def test_roster_backfill_cannot_modify_a_reviewed_person_but_can_restore_unlinked_legacy_roster(self):
         self.submit()
         self.approve()
         response = self.preview_roster("username,email,id\n学生,student01@example.edu,101\n")
@@ -752,11 +881,17 @@ class AdmissionTests(unittest.TestCase):
         member_id = self.legacy_roster()
         self.store.delete_members([member_id], "user:admin", "已确认人员离组")
         response = self.import_roster("username,email,id\n旧名单人员,legacy@example.edu,102\n")
-        self.assertEqual(response["summary"]["skip"], 1)
+        self.assertEqual(response["summary"]["restore"], 1)
         with self.store.connect() as c:
             member = c.execute("SELECT * FROM samlab_members WHERE id=?", (member_id,)).fetchone()
-        self.assertIsNone(member["account_id"])
-        self.assertIsNotNone(member["deleted_at"])
+        self.assertEqual(member["account_id"], "102")
+        self.assertIsNone(member["deleted_at"])
+        self.assertEqual((member["status"], member["policy_version"], member["synced_version"]),
+                         ("active", 3, 0))
+        reviewed_id = self.store.status("req-01")["member_id"]
+        self.store.delete_members([reviewed_id], "user:admin", "已确认人员离组")
+        response = self.preview_roster("username,email,id\n学生,student01@example.edu,101\n")
+        self.assertEqual(response.json()["summary"]["error"], 1, "CSV cannot guess a reviewed account's missing ID")
 
     def test_roster_commit_rechecks_conflicts_since_preview(self):
         staged = self.preview_roster("username,email,id\n甲,a@example.edu,101\n").json()["batch_id"]

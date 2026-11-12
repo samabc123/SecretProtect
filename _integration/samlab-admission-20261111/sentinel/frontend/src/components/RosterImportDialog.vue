@@ -12,6 +12,7 @@
       <dl class="import-summary">
         <div><dt>可新增</dt><dd>{{ preview.summary.add }}</dd></div>
         <div><dt>可补录 ID</dt><dd>{{ preview.summary.update }}</dd></div>
+        <div><dt>可恢复</dt><dd>{{ preview.summary.restore }}</dd></div>
         <div><dt>重复跳过</dt><dd>{{ preview.summary.skip }}</dd></div>
         <div><dt>无效行</dt><dd>{{ preview.summary.error }}</dd></div>
       </dl>
@@ -20,11 +21,11 @@
         <el-table-column prop="email" label="邮箱" min-width="220" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="account_id" label="平台 ID" min-width="100" />
-        <el-table-column label="结果" min-width="240"><template #default="{ row }"><el-tag :type="row.state === 'error' ? 'danger' : row.state === 'add' ? 'success' : row.state === 'update' ? 'warning' : 'info'">{{ states[row.state] }}</el-tag> {{ row.message }}</template></el-table-column>
+        <el-table-column label="结果" min-width="240"><template #default="{ row }"><el-tag :type="stateTypes[row.state]">{{ states[row.state] }}</el-tag> {{ row.message }}</template></el-table-column>
       </el-table>
       <ul v-else class="record-list" aria-label="名单导入预览">
         <li v-for="row in preview.rows" :key="row.line" class="record-item">
-          <div class="record-heading"><div class="record-identity"><strong>第 {{ row.line }} 行 · {{ row.username || '未填写用户名' }}</strong><span>{{ row.email }}</span></div><el-tag :type="row.state === 'error' ? 'danger' : row.state === 'add' ? 'success' : 'info'">{{ states[row.state] }}</el-tag></div>
+          <div class="record-heading"><div class="record-identity"><strong>第 {{ row.line }} 行 · {{ row.username || '未填写用户名' }}</strong><span>{{ row.email }}</span></div><el-tag :type="stateTypes[row.state]">{{ states[row.state] }}</el-tag></div>
           <dl class="record-fields"><div class="record-field-wide"><dt>平台 ID</dt><dd>{{ row.account_id || '未填写' }}</dd></div></dl>
           <p class="preview-result">{{ row.message }}</p>
         </li>
@@ -32,7 +33,7 @@
     </template>
     <template #footer>
       <el-button :disabled="busy" @click="visible = false">取消</el-button>
-      <el-button type="primary" :icon="Upload" :loading="busy" :disabled="!preview || preview.summary.error > 0 || preview.summary.add + preview.summary.update === 0" @click="commit">确认导入</el-button>
+      <el-button type="primary" :icon="Upload" :loading="busy" :disabled="!preview || preview.summary.error > 0 || preview.summary.add + preview.summary.update + preview.summary.restore === 0" @click="commit">确认导入</el-button>
     </template>
   </el-dialog>
 </template>
@@ -47,7 +48,8 @@ const props = defineProps({ modelValue: Boolean });
 const emit = defineEmits(["update:modelValue", "imported"]);
 const visible = computed({ get: () => props.modelValue, set: value => emit("update:modelValue", value) });
 const preview = ref(null), error = ref(""), busy = ref(false), input = ref(null);
-const states = { add: "新增", update: "补录 ID", skip: "跳过", error: "无效" };
+const states = { add: "新增", update: "补录 ID", restore: "恢复", skip: "跳过", error: "无效" };
+const stateTypes = { add: "success", update: "warning", restore: "warning", skip: "info", error: "danger" };
 const compact = useCompactLayout();
 watch(() => props.modelValue, value => { if (value) { preview.value = null; error.value = ""; if (input.value) input.value.value = ""; } });
 async function selectFile(event) {
@@ -77,7 +79,7 @@ async function commit() {
   busy.value = true; error.value = "";
   try {
     const { data } = await api.post("/admin/roster/commit", { batch_id: preview.value.batch_id });
-    ElMessage.success(`已新增 ${data.summary.add} 人，补录 ID ${data.summary.update} 人，跳过 ${data.summary.skip} 行。`);
+    ElMessage.success(`已新增 ${data.summary.add} 人，补录 ID ${data.summary.update} 人，恢复 ${data.summary.restore} 人，跳过 ${data.summary.skip} 行。`);
     visible.value = false; emit("imported");
   } catch (e) { error.value = admissionError(e); }
   finally { busy.value = false; }

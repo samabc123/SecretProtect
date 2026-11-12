@@ -95,6 +95,57 @@ def verify_roster_id_backfill(page, admission, origin):
     admission.delete_members([member_id], "synthetic-browser", "清理合成补录测试人员")
 
 
+def verify_roster_restoration(page, admission, origin, original):
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/admission")
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    page.get_by_role("button", name="导入名单", exact=True).click()
+    dialog = page.get_by_role("dialog", name="导入实验室名单", exact=True)
+    file = {
+        "name": "restore-roster.csv", "mimeType": "text/csv",
+        "buffer": f"用户id,用户名,邮箱\n801,导入人员,{original['email']}\n".encode("utf-8-sig"),
+    }
+    dialog.get_by_label("名单文件", exact=True).set_input_files(file)
+    expect(dialog.get_by_role("cell").get_by_text("恢复", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
+    assert not admission.dashboard()["members"], "Preview must not restore access"
+    page.screenshot(path=str(OUTPUT / "roster-restore-desktop.png"), full_page=True)
+    for width in (320, 390):
+        page.set_viewport_size({"width": width, "height": 844})
+        expect(dialog.get_by_role("list", name="名单导入预览").get_by_text("恢复", exact=True)).to_be_visible()
+        expect(dialog.get_by_text("可恢复", exact=True)).to_be_visible()
+        assert_dialog_fit(page, dialog)
+        assert_layout(page, f"roster-restore-{width}")
+    page.screenshot(path=str(OUTPUT / "roster-restore-mobile.png"), full_page=True)
+    dialog.get_by_role("button", name="确认导入", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    expect(page.get_by_role("tabpanel", name="白名单").get_by_text(original["email"], exact=True)).to_be_visible()
+    restored = admission.dashboard()["members"]
+    assert len(restored) == 1 and restored[0]["id"] == original["id"] and restored[0]["account_id"] == "801"
+    assert restored[0]["policy_version"] == original["policy_version"] + 2
+    assert restored[0]["sync_state"] == "pending_create" and restored[0]["synced_version"] == 0
+    audits = admission.dashboard()["audits"]
+    assert any(a["action"] == "whitelist.deleted" and a["subject"] == original["id"] for a in audits)
+    assert sum(a["action"] == "whitelist.restored" and a["subject"] == original["id"] for a in audits) == 1
+    page.reload()
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.get_by_role("tabpanel", name="白名单").get_by_text(original["email"], exact=True)).to_be_visible()
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.get_by_role("button", name="导入名单", exact=True).click()
+    dialog.get_by_label("名单文件", exact=True).set_input_files(file)
+    expect(dialog.get_by_role("cell").get_by_text("跳过", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
+    dialog.get_by_role("button", name="取消", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    page.get_by_role("row").filter(has_text=original["email"]).get_by_role("button", name="删除", exact=True).click()
+    removal = page.get_by_role("dialog", name="删除白名单人员", exact=True)
+    removal.get_by_role("textbox", name="处理原因").fill("清理合成恢复测试人员")
+    removal.locator("label.el-checkbox").click()
+    removal.get_by_role("button", name="确认删除", exact=True).click()
+    expect(removal).not_to_be_visible()
+    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("暂无已批准的 Samlab 人员")).to_be_visible()
+
+
 def verify_responsive_layout(page, admission, origin):
     long_email = "long-address-" + "x" * 46 + "@" + "lab-" + "a" * 40 + "." + "b" * 40 + ".example.edu"
     rows = [f"layout-{index:02d}@example.edu,布局测试人员{index:02d},{index + 1000}" for index in range(44)]
@@ -502,6 +553,8 @@ def main():
                     expect(dialog).not_to_be_visible()
                     expect(page.get_by_role("row").filter(has_text="student02@example.edu").get_by_text("不同意", exact=True)).to_be_visible()
                     results.append("rejection without free-text note")
+                    verify_roster_restoration(page, admission, origin, imported_member)
+                    results.append("deleted roster reimport explicitly previews restore on desktop/320px/mobile; one confirmation restores the same identity permanently; deletion and restoration audits retained; duplicate reimport skipped")
                     verify_roster_id_backfill(page, admission, origin)
                     results.append("legacy roster ID-only backfill is enabled with zero new rows; same member ID retained, platform ID survives reload, repeated complete import is skipped")
                     page.goto(origin + "/administrators")

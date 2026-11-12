@@ -1,1 +1,0 @@
-import{a7 as e}from"./index-CJUlbjib.js";const o=()=>e.get("/rules"),r=(t,n)=>e.patch(`/rules/${encodeURIComponent(t)}`,{enabled:n}),i=()=>e.post("/extensibility-experiments/run"),p=t=>e.post(`/extensibility-experiments/${encodeURIComponent(t)}/run`);export{p as a,o as g,i as r,r as t};

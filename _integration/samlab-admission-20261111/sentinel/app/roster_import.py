@@ -120,16 +120,17 @@ def classify(c, rows):
                 item["state"], item["message"] = "error", "该平台 ID 已关联其他邮箱，不允许覆盖。"
             elif existing and existing["account_id"] not in (None, account_id):
                 item["state"], item["message"] = "error", "该邮箱已关联其他平台 ID，不允许覆盖。"
+            elif existing and existing["account_id"] is None and (
+                    existing["source"] != "roster" or c.execute(
+                        "SELECT 1 FROM samlab_requests WHERE member_id=?", (existing["id"],)).fetchone()):
+                item["state"], item["message"] = "error", "该邮箱已有注册或账号关联流程，不能通过 CSV 修改绑定。"
             elif existing and (existing["deleted_at"] is not None or existing["status"] != "active"):
-                item["state"], item["message"] = "skip", "人员已删除或停用，保留原状态，不恢复准入。"
+                item["state"], item["message"] = "restore", "恢复原人员的永久白名单，保留账号绑定和历史审计，远端权限以平台同步为准。"
+                item["member_id"], item["policy_version"] = existing["id"], existing["policy_version"]
             elif existing and existing["account_id"] == account_id:
                 item["state"], item["message"] = "skip", "邮箱和平台 ID 已记录，保留原状态和账号绑定。"
             elif existing:
-                if (existing["source"] == "roster" and not c.execute(
-                        "SELECT 1 FROM samlab_requests WHERE member_id=?", (existing["id"],)).fetchone()):
-                    item["state"], item["message"] = "update", "为原名单补录平台 ID，不新增人员，不确认远端账号状态。"
-                else:
-                    item["state"], item["message"] = "error", "该邮箱已有注册或账号关联流程，不能通过 CSV 修改绑定。"
+                item["state"], item["message"] = "update", "为原名单补录平台 ID，不新增人员，不确认远端账号状态。"
             else:
                 item["state"], item["message"] = "add", "新增永久名单并记录平台 ID，不代表已核实远端账号。"
         if not invalid:
@@ -140,7 +141,7 @@ def classify(c, rows):
 
 
 def summary(rows):
-    return {state: sum(row["state"] == state for row in rows) for state in ("add", "update", "skip", "error")}
+    return {state: sum(row["state"] == state for row in rows) for state in ("add", "update", "restore", "skip", "error")}
 
 
 def preview(store, raw, actor):
@@ -155,7 +156,7 @@ def preview(store, raw, actor):
         batch_id = secrets.token_urlsafe(24)
         items = classify(c, rows)
         c.execute("INSERT INTO samlab_import_batches VALUES (?,?,?,?,NULL,?)",
-                  (batch_id, actor, json.dumps(rows, ensure_ascii=False), time.time() + 900, time.time()))
+                  (batch_id, actor, json.dumps(items, ensure_ascii=False), time.time() + 900, time.time()))
         return {"batch_id": batch_id, "rows": items, "summary": summary(items), "expires_in": 900}
 
 
@@ -170,11 +171,26 @@ def commit(store, batch_id, actor):
             raise AuthError("预览已过期，请重新选择文件。", 409)
         if batch["result_json"]:
             return json.loads(batch["result_json"])
-        items = classify(c, json.loads(batch["rows_json"]))
+        previewed = json.loads(batch["rows_json"])
+        items = classify(c, previewed)
         if any(row["state"] == "error" for row in items):
             raise AuthError("名单包含无效行，未写入任何人员，请修正文件后重新预览。", 409)
+        # A preview made before deletion must not silently become permission to restore access.
+        for before, current in zip(previewed, items):
+            if current["state"] == "restore" and (
+                    before.get("state") != "restore" or before.get("member_id") != current["member_id"]
+                    or before.get("policy_version") != current["policy_version"]):
+                raise AuthError("人员准入状态在预览后发生变化，请重新预览并确认恢复白名单。", 409)
         now = time.time()
         for item in items:
+            if item["state"] == "restore":
+                c.execute("UPDATE samlab_members SET status='active',deleted_at=NULL,expires_at=NULL,"
+                          "account_id=?,policy_version=policy_version+1,sync_state='pending_create',updated_at=? "
+                          "WHERE id=?", (item["account_id"], now, item["member_id"]))
+                store._audit(c, actor, "whitelist.restored", item["member_id"],
+                             f"CSV 批次 {batch_id}；重新导入恢复永久准入；平台 ID {item['account_id']}；"
+                             "保留原人员、账号绑定和删除审计；未确认远端权限已恢复。")
+                continue
             if item["state"] == "update":
                 existing = c.execute("SELECT id FROM samlab_members WHERE email=?", (item["email"],)).fetchone()
                 c.execute("UPDATE samlab_members SET account_id=?,updated_at=? WHERE id=?",

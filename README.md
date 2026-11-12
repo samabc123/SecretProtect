@@ -84,9 +84,16 @@ numbers and expiry columns are rejected. Imported IDs are displayed in the
 whitelist but do not verify mailbox ownership, provision accounts or confirm
 remote account status.
 
-Reimport can fill a missing platform ID on an active, unlinked legacy roster
-entry, without adding another person. It cannot replace an existing account
-mapping, reuse a deleted member's ID or restore deleted access. Same-file
+Reimport can fill a missing platform ID on an unlinked legacy roster entry,
+without adding another person. A fresh preview explicitly marks deleted or
+revoked people as `restore`; confirmation restores their permanent whitelist
+with the same member ID, email and platform account mapping. Missing IDs can
+only be filled on legacy roster entries without a linked registration workflow.
+Restoration retains deletion audits, writes a restoration audit, increments the
+policy version and awaits platform synchronization instead of claiming remote
+access is already restored. A preview made before deletion cannot silently
+restore access. It cannot replace an existing account mapping or reassign a
+deleted member's ID to another email. Same-file
 mapping conflicts block the entire batch; exact duplicates are skipped.
 Only a matching signed platform administrator delivery can associate an
 imported account with the service workflow. New registration cannot claim an
