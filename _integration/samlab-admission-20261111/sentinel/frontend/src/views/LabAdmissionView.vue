@@ -1,37 +1,44 @@
 <template>
-  <AppLayout>
+  <AppLayout table-page title="Samlab 人员准入" subtitle="实验室人员、注册审批与准入权限">
     <main class="samlab-admission" v-loading="loading">
-      <header class="admission-header management-heading">
-        <div><h2>Samlab 人员准入</h2><a :href="data.platform.url" target="_blank" rel="noopener noreferrer">{{ data.platform.url }}</a></div>
-        <div class="admission-header-actions"><el-tooltip content="刷新" placement="top"><el-button class="management-icon-button" aria-label="刷新" :icon="Refresh" :disabled="loading" @click="load" /></el-tooltip><el-button type="primary" :icon="Upload" @click="importVisible = true">导入名单</el-button></div>
-      </header>
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-      <el-alert :title="data.integration.service_connected ? '隔离候选环境已连接；生产平台尚未发布此改造。' : '尚未收到近期服务连接，账号状态以实际回执为准。'" type="warning" :closable="false" show-icon />
-      <dl class="admission-status">
-        <div><dt>待审批</dt><dd>{{ pending.length }}</dd></div>
-        <div><dt>有效白名单</dt><dd>{{ data.members.filter(m => m.status === 'active').length }}</dd></div>
-        <div><dt>待平台处理</dt><dd>{{ data.members.filter(m => ['pending_create', 'pending_revoke'].includes(m.sync_state)).length }}</dd></div>
-        <div><dt>服务签名</dt><dd>{{ data.integration.signature_configured ? "已配置" : "未配置" }}</dd></div>
-      </dl>
-      <div class="admission-toolbar management-toolbar">
+      <div class="admission-toolbar">
         <el-input v-model="query" clearable :prefix-icon="Search" :aria-label="tab === 'audit' ? '搜索审计记录' : '搜索用户名或邮箱'" :placeholder="tab === 'audit' ? '操作人、关联编号或依据' : '用户名或邮箱'" />
-        <el-select v-if="tab === 'requests'" v-model="requestStatus" aria-label="审批状态" placeholder="全部审批状态">
-          <el-option label="全部审批状态" value="" /><el-option v-for="(label, value) in decisionLabels" :key="value" :label="label" :value="value" />
-        </el-select>
-        <el-select v-if="tab !== 'audit'" v-model="source" aria-label="人员来源" placeholder="全部来源">
-          <el-option label="全部来源" value="" /><el-option v-for="(label, value) in sourceLabels" :key="value" :label="label" :value="value" />
-        </el-select>
-        <span>最近成功刷新：{{ updated || "尚未刷新" }}</span>
+        <div class="toolbar-actions">
+          <span v-if="tab === 'members' && selectedMembers.length" class="selection-count" aria-live="polite">已选择 {{ selectedMembers.length }} 人</span>
+          <el-tooltip content="刷新" placement="top"><el-button class="management-icon-button" aria-label="刷新" :icon="Refresh" :disabled="loading" @click="load" /></el-tooltip>
+          <el-tooltip content="导出当前筛选结果" placement="top"><el-button :icon="Download" :disabled="!activeRows.length" @click="exportRows">导出名单</el-button></el-tooltip>
+          <el-popover v-if="tab !== 'audit'" v-model:visible="filtersVisible" placement="bottom-end" :width="260" trigger="click" popper-class="admission-options">
+            <template #reference><el-button :icon="Filter" :aria-expanded="filtersVisible" aria-label="筛选设置">筛选设置<span v-if="filterCount" class="filter-count">{{ filterCount }}</span></el-button></template>
+            <el-form label-position="top">
+              <el-form-item v-if="tab === 'requests'" label="审批状态"><el-select v-model="requestStatus" aria-label="审批状态"><el-option label="全部审批状态" value="" /><el-option v-for="(label, value) in decisionLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item>
+              <el-form-item label="人员来源"><el-select v-model="source" aria-label="人员来源"><el-option label="全部来源" value="" /><el-option v-for="(label, value) in sourceLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item>
+              <el-button text :disabled="!filterCount" @click="requestStatus = ''; source = ''">重置筛选</el-button>
+            </el-form>
+          </el-popover>
+          <el-popover v-if="!compact" v-model:visible="columnsVisible" placement="bottom-end" :width="220" trigger="click" popper-class="admission-options">
+            <template #reference><el-button :icon="Operation" aria-label="列设置" :aria-expanded="columnsVisible">列设置</el-button></template>
+            <div class="column-options" role="group" aria-label="显示的表格列"><el-checkbox v-for="column in columnOptions" :key="column.key" :model-value="isColumnVisible(column.key)" @change="toggleColumn(column.key, $event)">{{ column.label }}</el-checkbox></div>
+            <el-button text @click="hiddenColumns[tab] = []">恢复默认列</el-button>
+          </el-popover>
+          <el-button v-if="tab === 'members'" :icon="Delete" type="danger" :plain="!selectedMembers.length" :disabled="!selectedMembers.length || loading || saving" @click="openRemoval(selectedMembers)">批量删除</el-button>
+          <el-button type="primary" :icon="Upload" @click="importVisible = true">导入名单</el-button>
+        </div>
       </div>
-      <el-tabs v-model="tab">
+      <div class="integration-strip" role="status">
+        <span class="integration-notice"><el-icon><Warning /></el-icon>{{ data.integration.service_connected ? '隔离候选环境已连接；生产平台尚未发布此改造。' : '尚未收到近期服务连接，账号状态以实际回执为准。' }}</span>
+        <a :href="data.platform.url" target="_blank" rel="noopener noreferrer">Samlab 平台<el-icon><TopRight /></el-icon></a>
+      </div>
+      <el-tabs v-model="tab" class="admission-tabs" @tab-change="filtersVisible = false; columnsVisible = false">
         <el-tab-pane :label="`注册申请（${pending.length} 待审批）`" name="requests">
-          <el-table v-if="!compact" class="management-table" :data="visibleRequests" :empty-text="emptyRequests">
-            <el-table-column label="人员 / 邮箱" min-width="240"><template #default="{ row }"><PersonIdentity :name="row.username" :detail="row.email" /></template></el-table-column>
-            <el-table-column label="实验室名单" min-width="125"><template #default="{ row }">{{ row.roster_match ? '名单内' : '未匹配导入名单' }}</template></el-table-column>
-            <el-table-column label="来源" min-width="130"><template #default="{ row }">{{ sourceLabels[row.source] || '用户申请' }}</template></el-table-column>
-            <el-table-column label="收到时间" min-width="170"><template #default="{ row }">{{ date(row.submitted_at) }}</template></el-table-column>
-            <el-table-column label="审批" width="100"><template #default="{ row }"><el-tag :type="decisionType(row.status)">{{ decisionLabels[row.status] }}</el-tag></template></el-table-column>
-            <el-table-column label="操作 / 审批人" min-width="130"><template #default="{ row }">
+          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleRequests" :empty-text="emptyRequests" @sort-change="sortRows">
+            <el-table-column label="用户" prop="email" sortable="custom" fixed="left" width="300"><template #default="{ row }"><PersonIdentity email-first :name="row.username" :detail="row.email" /></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('username')" label="用户名" prop="username" sortable="custom" min-width="150" />
+            <el-table-column v-if="isColumnVisible('roster_match')" label="实验室名单" min-width="160"><template #default="{ row }"><span :class="['admission-state', row.roster_match ? 'is-success' : 'is-neutral']">{{ row.roster_match ? '名单内' : '未匹配导入名单' }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('source')" label="来源" min-width="160"><template #default="{ row }"><span class="source-label">{{ sourceLabels[row.source] || '用户申请' }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('submitted_at')" label="收到时间" prop="submitted_at" sortable="custom" min-width="180"><template #default="{ row }"><span class="table-time">{{ date(row.submitted_at) }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('status')" label="审批" width="120"><template #default="{ row }"><span :class="['admission-state', `is-${decisionType(row.status)}`]">{{ decisionLabels[row.status] }}</span></template></el-table-column>
+            <el-table-column label="操作 / 审批人" fixed="right" width="132"><template #default="{ row }">
               <el-button v-if="row.status === 'pending'" :icon="EditPen" text type="primary" @click="openReview(row)">审批</el-button>
               <span v-else>{{ row.reviewed_by || '—' }}</span>
             </template></el-table-column>
@@ -53,19 +60,20 @@
           </template>
         </el-tab-pane>
         <el-tab-pane label="白名单" name="members">
-          <div class="member-actions">
-            <span aria-live="polite">已选择 {{ selectedMembers.length }} 人</span>
-            <el-button :icon="Delete" type="danger" plain :disabled="!selectedMembers.length || loading || saving" @click="openRemoval(selectedMembers)">批量删除</el-button>
-            <el-checkbox v-if="compact && visibleMembers.length" :model-value="allPageSelected" :indeterminate="selectedMembers.length > 0 && !allPageSelected" @change="selectPage">选择本页</el-checkbox>
+          <div v-if="compact && visibleMembers.length" class="member-actions">
+            <el-checkbox :model-value="allPageSelected" :indeterminate="selectedMembers.length > 0 && !allPageSelected" @change="selectPage">选择本页</el-checkbox>
+            <span>已选择 {{ selectedMembers.length }} 人</span>
           </div>
-          <el-table v-if="!compact" class="management-table" ref="memberTable" row-key="id" :data="visibleMembers" :empty-text="emptyMembers" @selection-change="selectedMembers = $event">
-            <el-table-column type="selection" width="48" />
-            <el-table-column label="人员 / 邮箱" min-width="250"><template #default="{ row }"><PersonIdentity :name="row.username" :detail="row.email" /></template></el-table-column>
-            <el-table-column label="来源" min-width="130"><template #default="{ row }">{{ sourceLabels[row.source] || '用户申请' }}</template></el-table-column>
-            <el-table-column label="准入" width="110"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'danger'">{{ row.status === "active" ? "永久有效" : "已停用" }}</el-tag></template></el-table-column>
-            <el-table-column label="平台状态" min-width="160"><template #default="{ row }">{{ platformState(row) }}</template></el-table-column>
-            <el-table-column label="平台账号编号" min-width="120"><template #default="{ row }">{{ row.account_id || '尚未关联' }}</template></el-table-column>
-            <el-table-column label="操作" width="110"><template #default="{ row }">
+          <el-table v-if="!compact" class="management-table" height="100%" ref="memberTable" row-key="id" :data="visibleMembers" :empty-text="emptyMembers" @selection-change="selectedMembers = $event" @sort-change="sortRows">
+            <el-table-column type="selection" width="52" fixed="left" />
+            <el-table-column label="用户" prop="email" sortable="custom" fixed="left" width="300"><template #default="{ row }"><PersonIdentity email-first :name="row.username" :detail="row.email" /></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('username')" label="用户名" prop="username" sortable="custom" min-width="150" />
+            <el-table-column v-if="isColumnVisible('source')" label="来源" min-width="160"><template #default="{ row }"><span class="source-label">{{ sourceLabels[row.source] || '用户申请' }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('status')" label="准入" width="120"><template #default="{ row }"><span :class="['admission-state', row.status === 'active' ? 'is-success' : 'is-danger']">{{ row.status === "active" ? "永久有效" : "已停用" }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('sync_state')" label="平台状态" min-width="180"><template #default="{ row }"><span class="platform-state">{{ platformState(row) }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('account_id')" label="平台账号编号" min-width="150"><template #default="{ row }">{{ row.account_id || '尚未关联' }}</template></el-table-column>
+            <el-table-column v-if="isColumnVisible('created_at')" label="加入时间" prop="created_at" sortable="custom" min-width="190"><template #default="{ row }"><span class="table-time">{{ date(row.created_at) }}</span></template></el-table-column>
+            <el-table-column label="操作" fixed="right" width="110"><template #default="{ row }">
               <el-button :icon="Delete" text type="danger" :disabled="saving" @click="openRemoval([row])">删除</el-button>
             </template></el-table-column>
           </el-table>
@@ -89,12 +97,12 @@
           </template>
         </el-tab-pane>
         <el-tab-pane label="审批审计" name="audit">
-          <el-table v-if="!compact" class="management-table" :data="visibleAudits" :empty-text="emptyAudits">
-            <el-table-column label="时间" min-width="185"><template #default="{ row }">{{ date(row.created_at) }}</template></el-table-column>
-            <el-table-column prop="actor" label="操作人" min-width="145" />
-            <el-table-column label="操作" min-width="210"><template #default="{ row }">{{ auditLabels[row.action] || row.action }}</template></el-table-column>
-            <el-table-column prop="subject" label="关联编号" min-width="240" />
-            <el-table-column prop="note" label="依据" min-width="260" />
+          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleAudits" :empty-text="emptyAudits" @sort-change="sortRows">
+            <el-table-column label="时间" prop="created_at" sortable="custom" fixed="left" width="200"><template #default="{ row }"><span class="table-time">{{ date(row.created_at) }}</span></template></el-table-column>
+            <el-table-column v-if="isColumnVisible('actor')" prop="actor" label="操作人" sortable="custom" min-width="145" />
+            <el-table-column v-if="isColumnVisible('action')" label="操作" min-width="210"><template #default="{ row }">{{ auditLabels[row.action] || row.action }}</template></el-table-column>
+            <el-table-column v-if="isColumnVisible('subject')" prop="subject" label="关联编号" min-width="240" />
+            <el-table-column v-if="isColumnVisible('note')" prop="note" label="依据" min-width="260" />
           </el-table>
           <template v-else>
             <ul class="record-list" aria-label="审批审计列表">
@@ -111,8 +119,11 @@
           </template>
         </el-tab-pane>
       </el-tabs>
-      <PaginationBar v-model:page="currentPage" v-model:page-size="pageSize" :total="activeRows.length" />
-      <p class="admission-footnote">列表最多显示最近 {{ data.list_limit }} 条记录。历史试点身份 {{ data.legacy_people_count }} 条，原数据保留，未自动映射为 Samlab 账号。</p>
+      <PaginationBar table-style v-model:page="currentPage" v-model:page-size="pageSize" :total="activeRows.length" />
+      <footer class="admission-footnote">
+        <span>{{ tab === 'audit' ? '审计列表最多显示最近 100 条' : `列表最多显示最近 ${data.list_limit} 条` }}<template v-if="data.legacy_people_count"> · 历史试点身份 {{ data.legacy_people_count }} 条，未自动映射</template></span>
+        <span :title="updated">最近刷新 {{ updated ? updated.split(' ')[1] : '尚未刷新' }} · 服务签名{{ data.integration.signature_configured ? '已配置' : '未配置' }}</span>
+      </footer>
       <el-dialog v-model="reviewVisible" title="注册准入审批" width="480px" class="samlab-dialog management-dialog" align-center :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
         <PersonIdentity :name="selected?.username" :detail="selected?.email" />
         <el-alert v-if="dialogError" :title="dialogError" type="error" :closable="false" />
@@ -135,13 +146,14 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { Delete, EditPen, Refresh, Search, Upload } from "@element-plus/icons-vue";
+import { Delete, Download, EditPen, Filter, Operation, Refresh, Search, TopRight, Upload, Warning } from "@element-plus/icons-vue";
 import RosterImportDialog from "../components/RosterImportDialog.vue";
 import AppLayout from "../components/AppLayout.vue";
 import PaginationBar from "../components/PaginationBar.vue";
 import PersonIdentity from "../components/PersonIdentity.vue";
 import { useCompactLayout } from "../composables/useCompactLayout";
 import { admissionApi as api, admissionError } from "../api/admission";
+import { encodeCsv, sortedRows } from "../utils/admissionTable";
 
 const data = reactive({ platform: { url: "https://researchchat.samlab.cn/" }, requests: [], members: [], audits: [], integration: {}, legacy_people_count: 0, list_limit: 500 });
 const loading = ref(false), saving = ref(false), error = ref(""), query = ref(""), tab = ref("requests"), updated = ref("");
@@ -150,6 +162,34 @@ const removalVisible = ref(false), removalTargets = ref([]), note = ref(""), con
 const memberTable = ref(null), selectedMembers = ref([]);
 const importVisible = ref(false);
 const requestStatus = ref(""), source = ref("");
+const filtersVisible = ref(false), columnsVisible = ref(false);
+const hiddenColumns = reactive({ requests: [], members: [], audit: [] });
+const columnDefinitions = {
+  requests: [{ key: "username", label: "用户名" }, { key: "roster_match", label: "实验室名单" }, { key: "source", label: "来源" }, { key: "submitted_at", label: "收到时间" }, { key: "status", label: "审批" }],
+  members: [{ key: "username", label: "用户名" }, { key: "source", label: "来源" }, { key: "status", label: "准入" }, { key: "sync_state", label: "平台状态" }, { key: "account_id", label: "平台账号编号" }, { key: "created_at", label: "加入时间" }],
+  audit: [{ key: "actor", label: "操作人" }, { key: "action", label: "操作" }, { key: "subject", label: "关联编号" }, { key: "note", label: "依据" }],
+};
+try {
+  const stored = JSON.parse(localStorage.getItem("secretradar:admission-columns") || "{}");
+  for (const key of Object.keys(hiddenColumns)) {
+    if (Array.isArray(stored[key])) hiddenColumns[key] = stored[key].filter(value => columnDefinitions[key].some(column => column.key === value));
+  }
+} catch { /* Use the default columns if preferences are unavailable. */ }
+watch(hiddenColumns, value => {
+  try { localStorage.setItem("secretradar:admission-columns", JSON.stringify(value)); } catch { /* Keep in-memory preferences. */ }
+}, { deep: true });
+const columnOptions = computed(() => columnDefinitions[tab.value]);
+const isColumnVisible = key => !hiddenColumns[tab.value].includes(key);
+function toggleColumn(key, checked) {
+  hiddenColumns[tab.value] = checked ? hiddenColumns[tab.value].filter(value => value !== key) : [...hiddenColumns[tab.value], key];
+}
+const filterCount = computed(() => Number(Boolean(source.value)) + Number(tab.value === "requests" && Boolean(requestStatus.value)));
+const sorts = reactive({ requests: {}, members: {}, audit: {} });
+function sortRows({ prop, order }) {
+  sorts[tab.value] = { prop, order };
+  currentPage.value = 1;
+  clearSelection();
+}
 const pending = computed(() => data.requests.filter(r => r.status === "pending"));
 const compact = useCompactLayout();
 const pages = reactive({ requests: 1, members: 1, audit: 1 }), pageSize = ref(20);
@@ -161,7 +201,7 @@ const filteredAudits = computed(() => {
 });
 const activeRows = computed(() => ({ requests: filteredRequests.value, members: filteredMembers.value, audit: filteredAudits.value })[tab.value]);
 const currentPage = computed({ get: () => pages[tab.value], set: value => { pages[tab.value] = value; } });
-const pageRows = rows => rows.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value);
+const pageRows = rows => sortedRows(rows, sorts[tab.value]).slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value);
 const visibleRequests = computed(() => tab.value === "requests" ? pageRows(filteredRequests.value) : []);
 const visibleMembers = computed(() => tab.value === "members" ? pageRows(filteredMembers.value) : []);
 const visibleAudits = computed(() => tab.value === "audit" ? pageRows(filteredAudits.value) : []);
@@ -178,6 +218,18 @@ const auditLabels = { "whitelist.imported": "导入名单人员", "roster.import
 const date = value => value ? new Date(value * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
 const decisionType = value => ({ pending: "warning", approved: "success", rejected: "danger" })[value];
 function filtered(rows) { const q = query.value.trim().toLowerCase(); return rows.filter(r => (!q || `${r.username} ${r.email}`.toLowerCase().includes(q)) && (!source.value || r.source === source.value)); }
+function exportRows() {
+  const rows = sortedRows(activeRows.value, sorts[tab.value]);
+  const csv = tab.value === "audit"
+    ? [["时间", "操作人", "操作", "关联编号", "依据"], ...rows.map(row => [date(row.created_at), row.actor, auditLabels[row.action] || row.action, row.subject, row.note])]
+    : tab.value === "members"
+      ? [["邮箱", "用户名", "来源", "准入", "平台状态", "平台账号编号", "加入时间"], ...rows.map(row => [row.email, row.username, sourceLabels[row.source] || row.source, row.status === "active" ? "永久有效" : "已停用", platformState(row), row.account_id, date(row.created_at)])]
+      : [["邮箱", "用户名", "实验室名单", "来源", "收到时间", "审批", "审批人"], ...rows.map(row => [row.email, row.username, row.roster_match ? "名单内" : "未匹配导入名单", sourceLabels[row.source] || row.source, date(row.submitted_at), decisionLabels[row.status], row.reviewed_by])];
+  const url = URL.createObjectURL(new Blob([encodeCsv(csv)], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = `samlab-${tab.value}.csv`; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 async function load(background = false) {
   if (loading.value) return;
   loading.value = true;
@@ -223,47 +275,87 @@ async function remove() {
   finally { saving.value = false; }
 }
 let timer;
-onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !importVisible.value && !selectedMembers.value.length) load(true); }, 15000); });
+onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !importVisible.value && !filtersVisible.value && !columnsVisible.value && !selectedMembers.value.length) load(true); }, 15000); });
 onUnmounted(() => window.clearInterval(timer));
 </script>
 
 <style scoped>
-.samlab-admission { min-width: 0; letter-spacing: 0; }
-.samlab-admission :deep(.el-table) { min-width: 0; }
-.admission-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.admission-header-actions .el-button + .el-button { margin-left: 0; }
-.admission-header, .admission-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-.admission-header h2 { margin: 0 0 8px; font-size: 23px; }
-.admission-header a { font-size: 13px; overflow-wrap: anywhere; }
-.samlab-admission :deep(.el-alert) { margin-bottom: 18px; }
-.admission-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 24px 0; padding: 22px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.admission-status div { display: grid; gap: 8px; min-width: 0; }
-.admission-status dt, .admission-toolbar span, .admission-footnote { color: var(--muted-strong); font-size: 13px; }
-.admission-status dd { margin: 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.admission-status div:first-child dd { color: #996519; }
-.admission-status div:nth-child(2) dd { color: #167850; }
-.admission-status div:last-child dd { font-size: 17px; min-height: 27px; display: flex; align-items: center; }
-.admission-toolbar > span { margin-left: auto; font-size: 12px; }
-.admission-toolbar .el-input { max-width: 350px; }
-.admission-footnote { line-height: 1.7; margin: 18px 0 0; }
+.samlab-admission { width: 100%; min-width: 0; letter-spacing: 0; color: #344254; }
+.samlab-admission :deep(*) { letter-spacing: 0; }
+.admission-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.admission-toolbar > .el-input { width: 280px; max-width: 100%; }
+.toolbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.toolbar-actions .el-button { min-height: 38px; border-radius: 8px; margin-left: 0; font-size: 13px; }
+.toolbar-actions .management-icon-button { width: 38px; }
+.selection-count { color: #526171; font-size: 12px; }
+.filter-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; color: #07675f; background: #d9f7ee; font-size: 11px; }
+.integration-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 14px; color: #74602d; font-size: 12px; line-height: 1.6; }
+.integration-notice { display: inline-flex; align-items: center; gap: 6px; }
+.integration-notice .el-icon { flex: 0 0 15px; }
+.integration-strip a { display: inline-flex; align-items: center; gap: 4px; color: #08756e; font-weight: 500; white-space: nowrap; }
+.samlab-admission > .el-alert { margin-bottom: 12px; flex-shrink: 0; }
+.admission-tabs :deep(.el-tabs__header) { margin-bottom: 14px; }
+.admission-tabs :deep(.el-tabs__nav-wrap::after) { height: 1px; background: #e0e7eb; }
+.admission-tabs :deep(.el-tabs__item) { font-size: 13px; font-weight: 500; }
+.samlab-admission :deep(.management-table) { min-width: 0; --el-table-header-bg-color: #f8fafb; --el-table-row-hover-bg-color: #f1faf7; --el-table-border-color: #eef1f4; color: #48566a; }
+.samlab-admission :deep(.management-table th.el-table__cell) { height: 52px; color: #526174; font-size: 13px; font-weight: 500; text-transform: none; }
+.samlab-admission :deep(.management-table td.el-table__cell) { height: 78px; padding-block: 14px; font-size: 13px; }
+.samlab-admission :deep(.management-table .cell) { padding-inline: 16px; overflow-wrap: anywhere; }
+.samlab-admission :deep(.management-table .el-table__row:nth-child(even) td.el-table__cell) { background: #f9fafb; }
+.samlab-admission :deep(.management-table .el-table__row:hover td.el-table__cell) { background: #f1faf7; }
+.samlab-admission :deep(.management-table .el-table-fixed-column--right) { border-left: 1px solid #eef1f4; }
+.samlab-admission :deep(.management-table .el-table-fixed-column--right .cell) { padding-inline: 8px; }
+.samlab-admission :deep(.management-table .el-table-fixed-column--right .el-button) { padding-inline: 6px; margin: 0; }
+.samlab-admission :deep(.el-table__body-wrapper) { scrollbar-gutter: stable; }
+.source-label { display: inline-block; padding: 3px 8px; border-radius: 4px; background: #f0f2f5; color: #526171; font-size: 12px; line-height: 1.5; }
+.admission-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.6; white-space: nowrap; }
+.admission-state::before { content: ""; display: block; flex: 0 0 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.is-success { color: #16834d; }
+.is-warning { color: #91650f; }
+.is-danger { color: #bd353e; }
+.is-neutral { color: #657384; }
+.table-time { color: #677488; font-size: 12px; font-variant-numeric: tabular-nums; }
+.platform-state { color: #58697a; font-size: 12px; }
+.admission-footnote { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-top: 10px; color: #657384; font-size: 11px; line-height: 1.7; }
+.column-options { display: grid; gap: 4px; margin-bottom: 8px; }
+.column-options .el-checkbox { margin-right: 0; }
 .subject { overflow-wrap: anywhere; font-size: 14px; }
 .management-dialog :deep(.person-identity) { margin-bottom: 24px; }
-.member-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; margin: 0 0 14px; min-height: 34px; font-size: 13px; }
+.member-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; margin: 0 0 14px; min-height: 34px; font-size: 13px; }
 .member-actions > span { color: var(--muted-strong); }
-.member-actions > .el-checkbox { margin-left: auto; margin-right: 0; }
+.member-actions > .el-checkbox { margin-right: 0; }
 .record-heading > .el-checkbox { margin-right: 0; padding-block: 2px; }
 .samlab-admission :deep(.el-table .cell) { overflow-wrap: anywhere; }
 .removal-subjects { max-height: 200px; overflow: auto; padding-left: 22px; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
 :deep(.el-checkbox) { height: auto; white-space: normal; }
 :deep(.el-checkbox__label) { white-space: normal; line-height: 1.7; }
-@media (max-width: 700px) {
-  .admission-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
-  .admission-status div { display: grid; gap: 6px; }
-  .admission-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
-  .admission-toolbar .el-input { max-width: none; }
-  .admission-toolbar > span { margin-left: 0; }
-  .admission-header { align-items: flex-start; gap: 16px; }
-  .admission-header-actions { width: 100%; }
-  .admission-header-actions .el-button { min-height: 40px; }
+@media (min-width: 901px) {
+  .samlab-admission { display: flex; flex-direction: column; min-height: 0; }
+  .admission-toolbar, .integration-strip, .admission-footnote { flex: 0 0 auto; }
+  .admission-tabs { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; margin-bottom: 18px; }
+  .admission-tabs :deep(.el-tabs__header) { flex: 0 0 auto; }
+  .admission-tabs :deep(.el-tabs__content) { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .admission-tabs :deep(.el-tab-pane) { height: 100%; }
 }
+@media (max-width: 900px) {
+  .admission-toolbar { gap: 12px; }
+  .admission-toolbar > .el-input { width: 100%; }
+  .toolbar-actions { width: 100%; justify-content: flex-start; margin-left: 0; }
+  .toolbar-actions .el-button { min-height: 40px; }
+  .integration-strip { margin-top: 4px; }
+  .admission-tabs { margin-bottom: 16px; }
+  .samlab-admission :deep(.pagination-bar .el-pagination) { margin-left: 0; max-width: 100%; }
+  .samlab-admission :deep(.pagination-bar .el-pagination__jump),
+  .samlab-admission :deep(.pagination-bar .btn-first),
+  .samlab-admission :deep(.pagination-bar .btn-last) { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .admission-tabs :deep(.el-tabs__active-bar) { transition: transform 180ms cubic-bezier(.16, 1, .3, 1); }
+}
+</style>
+
+<style>
+.admission-options { --el-color-primary: #087f78; --el-color-primary-light-9: #edf9f6; }
+.admission-options .el-checkbox__input.is-checked .el-checkbox__inner { background: #087f78; border-color: #087f78; }
+.admission-options .el-checkbox__input.is-checked + .el-checkbox__label { color: #08756e; }
 </style>

@@ -1,6 +1,7 @@
 """Real browser acceptance against disposable synthetic databases only."""
 
 import json
+import csv
 import os
 import socket
 import subprocess
@@ -27,14 +28,19 @@ PASSWORD = "Browser-test-only-2026!"
 OUTPUT = ROOT / ".test-results" / "samlab"
 
 def choose_filter(page, name, option):
+    admission_filter = page.get_by_role("button", name="筛选设置", exact=True)
+    if admission_filter.count() and admission_filter.get_attribute("aria-expanded") != "true":
+        admission_filter.click()
     page.locator(".el-select").filter(has=page.get_by_role("combobox", name=name, exact=True)).click()
     page.get_by_role("option", name=option, exact=True).click()
     expect(page.locator(".el-select-dropdown:visible")).to_have_count(0)
+    if admission_filter.count():
+        admission_filter.click()
 
 def assert_layout(page, name):
     page.wait_for_function("document.documentElement.scrollWidth <= innerWidth", timeout=5000)
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"{name}: page overflow"
-    clipped = page.locator(".record-identity, .record-fields dd, .preview-result").evaluate_all("""
+    clipped = page.locator(".record-identity, .record-fields dd, .preview-result, .admission-state").evaluate_all("""
         nodes => nodes.filter(node => node.getClientRects().length &&
           node.scrollWidth > node.clientWidth + 1).map(node => node.className)
     """)
@@ -61,6 +67,48 @@ def verify_responsive_layout(page, admission, origin):
     page.get_by_role("tab", name="白名单", exact=True).click()
     expect(page.locator(".pagination-summary")).to_contain_text("共 45 条")
     expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(20)
+    with page.expect_download() as exported:
+        page.get_by_role("button", name="导出名单", exact=True).click()
+    with exported.value.path().open(encoding="utf-8-sig", newline="") as stream:
+        exported_rows = list(csv.reader(stream))
+    assert len(exported_rows) == 46, "Export must include all filtered records, not only the current page"
+    assert exported_rows[0][0:2] == ["邮箱", "用户名"]
+    columns_button = page.get_by_role("button", name="列设置", exact=True)
+    columns_button.click()
+    columns = page.get_by_role("group", name="显示的表格列", exact=True)
+    columns.locator("label.el-checkbox").filter(has_text="平台账号编号").click()
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_have_count(0)
+    columns_button.click()
+    page.reload()
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_have_count(0)
+    columns_button.click()
+    page.get_by_role("button", name="恢复默认列", exact=True).click()
+    columns_button.click()
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_be_visible()
+    expect(columns).not_to_be_visible()
+    page.locator("thead:visible label.el-checkbox").click()
+    page.get_by_role("columnheader", name="用户名", exact=False).click()
+    expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_disabled()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr").first).to_contain_text("layout-00@example.edu")
+    page.set_viewport_size({"width": 1904, "height": 930})
+    assert_layout(page, "Sub2API-style desktop 1904x930")
+    assert page.evaluate("document.documentElement.scrollHeight <= innerHeight + 1"), "Desktop must scroll inside the table"
+    table = page.locator(".management-table:visible")
+    assert table.bounding_box()["height"] >= 400
+    footer = page.locator(".pagination-bar").bounding_box()
+    assert footer["y"] + footer["height"] <= 930, "Pagination must remain inside the viewport"
+    page.mouse.move(280, 80)
+    page.screenshot(path=str(OUTPUT / "sub2api-whitelist-1904x930.png"))
+    page.locator("thead:visible label.el-checkbox").click()
+    page.screenshot(path=str(OUTPUT / "sub2api-selection-1904x930.png"))
+    page.locator("thead:visible label.el-checkbox").click()
+    columns_button.click()
+    expect(columns).to_be_visible()
+    page.screenshot(path=str(OUTPUT / "sub2api-columns-1904x930.png"))
+    columns_button.click()
+    expect(columns).not_to_be_visible()
+    page.set_viewport_size({"width": 1440, "height": 1000})
     page.locator("thead:visible label.el-checkbox").click()
     expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_enabled()
     page.get_by_role("button", name="下一页").click()
@@ -70,7 +118,7 @@ def verify_responsive_layout(page, admission, origin):
     page.get_by_role("textbox", name="搜索用户名或邮箱").fill("no-such-person")
     expect(page.get_by_text("没有匹配的白名单人员", exact=True)).to_be_visible()
     page.get_by_role("textbox", name="搜索用户名或邮箱").fill("")
-    matrix = [(1440, 1000), (1024, 768), (768, 1024), (390, 844), (320, 568), (844, 390)]
+    matrix = [(1904, 930), (1440, 1000), (1024, 768), (768, 1024), (390, 844), (320, 568), (844, 390)]
     for width, height in matrix:
         page.set_viewport_size({"width": width, "height": height})
         search = page.get_by_role("textbox", name="搜索用户名或邮箱")
@@ -436,6 +484,7 @@ def main():
                     verify_security_workspace(page, origin)
                     results.append("security console shows persisted synthetic events with provenance; target explorer filters tasks and opens details; no scan triggered")
                     verify_responsive_layout(page, admission, origin)
+                    results.append("Sub2API-style viewport-filling table, fixed pagination, persisted column settings, full-set sorting clears selection and CSV export includes 45 records")
                     results.append("45 synthetic members: pagination, page-selection reset, empty search, long names/emails, desktop/tablet/mobile/landscape, dialog footer, drawer and all existing route widths")
                     regular_context = browser.new_context()
                     regular = regular_context.new_page()
@@ -462,7 +511,7 @@ def main():
                     process.wait(timeout=5)
     report = {"run_completed": True, "workflows": results, "page_errors": errors, "screenshots": str(OUTPUT),
               "browser": "Microsoft Edge / Chromium, emulated viewport sizes",
-              "layout_viewports": ["1440x1000", "1024x768", "768x1024", "390x844", "320x568", "844x390"],
+              "layout_viewports": ["1904x930", "1440x1000", "1024x768", "768x1024", "390x844", "320x568", "844x390"],
               "synthetic_only": True, "real_samlab_integrated": False, "production_changed": False}
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     (OUTPUT / "browser-results.json").write_text(rendered, encoding="utf-8")
