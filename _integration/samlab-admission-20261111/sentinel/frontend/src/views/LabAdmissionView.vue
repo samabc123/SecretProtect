@@ -70,9 +70,7 @@
             <el-table-column v-if="isColumnVisible('username')" label="用户名" prop="username" sortable="custom" min-width="150" />
             <el-table-column v-if="isColumnVisible('source')" label="来源" min-width="160"><template #default="{ row }"><span class="source-label">{{ sourceLabels[row.source] || '用户申请' }}</span></template></el-table-column>
             <el-table-column v-if="isColumnVisible('status')" label="准入" width="120"><template #default="{ row }"><span :class="['admission-state', row.status === 'active' ? 'is-success' : 'is-danger']">{{ row.status === "active" ? "永久有效" : "已停用" }}</span></template></el-table-column>
-            <el-table-column v-if="isColumnVisible('sync_state')" label="平台状态" min-width="180"><template #default="{ row }"><span class="platform-state">{{ platformState(row) }}</span></template></el-table-column>
             <el-table-column v-if="isColumnVisible('account_id')" label="平台账号编号" min-width="150"><template #default="{ row }">{{ row.account_id || '尚未关联' }}</template></el-table-column>
-            <el-table-column v-if="isColumnVisible('created_at')" label="加入时间" prop="created_at" sortable="custom" min-width="190"><template #default="{ row }"><span class="table-time">{{ date(row.created_at) }}</span></template></el-table-column>
             <el-table-column label="操作" fixed="right" width="110"><template #default="{ row }">
               <el-button :icon="Delete" text type="danger" :disabled="saving" @click="openRemoval([row])">删除</el-button>
             </template></el-table-column>
@@ -87,7 +85,6 @@
                 </div>
                 <dl class="record-fields">
                   <div><dt>来源</dt><dd>{{ sourceLabels[row.source] || '用户申请' }}</dd></div>
-                  <div><dt>平台状态</dt><dd>{{ platformState(row) }}</dd></div>
                   <div class="record-field-wide"><dt>平台账号编号</dt><dd>{{ row.account_id || '尚未关联' }}</dd></div>
                 </dl>
                 <div class="record-actions"><el-button :icon="Delete" type="danger" plain :disabled="saving" @click="openRemoval([row])">删除</el-button></div>
@@ -166,7 +163,7 @@ const filtersVisible = ref(false), columnsVisible = ref(false);
 const hiddenColumns = reactive({ requests: [], members: [], audit: [] });
 const columnDefinitions = {
   requests: [{ key: "username", label: "用户名" }, { key: "roster_match", label: "实验室名单" }, { key: "source", label: "来源" }, { key: "submitted_at", label: "收到时间" }, { key: "status", label: "审批" }],
-  members: [{ key: "username", label: "用户名" }, { key: "source", label: "来源" }, { key: "status", label: "准入" }, { key: "sync_state", label: "平台状态" }, { key: "account_id", label: "平台账号编号" }, { key: "created_at", label: "加入时间" }],
+  members: [{ key: "username", label: "用户名" }, { key: "source", label: "来源" }, { key: "status", label: "准入" }, { key: "account_id", label: "平台账号编号" }],
   audit: [{ key: "actor", label: "操作人" }, { key: "action", label: "操作" }, { key: "subject", label: "关联编号" }, { key: "note", label: "依据" }],
 };
 try {
@@ -212,8 +209,6 @@ const emptyMembers = computed(() => query.value.trim() || source.value ? "没有
 const emptyAudits = computed(() => query.value.trim() ? "没有匹配的审批审计" : "暂无审批审计");
 const decisionLabels = { pending: "待审批", approved: "已同意", rejected: "不同意" };
 const sourceLabels = { self: "用户申请", admin_direct: "管理员直接创建", admin_invite: "管理员邀请开通", roster: "文件导入" };
-const accountLabels = { pending_create: "待平台开通", active: "平台已回执开通", pending_revoke: "待平台停用", disabled: "平台已回执停用" };
-const platformState = row => row.awaiting_registration ? "待注册或确认申请" : accountLabels[row.sync_state] || "等待平台状态";
 const auditLabels = { "whitelist.imported": "导入名单人员", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "历史撤销准入", "whitelist.deleted": "删除白名单人员", "whitelist.batch_deleted": "批量删除白名单人员", "whitelist.permanent_enabled": "转为永久白名单", "whitelist.legacy_deleted": "合并历史停用状态", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
 const date = value => value ? new Date(value * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
 const decisionType = value => ({ pending: "warning", approved: "success", rejected: "danger" })[value];
@@ -223,7 +218,7 @@ function exportRows() {
   const csv = tab.value === "audit"
     ? [["时间", "操作人", "操作", "关联编号", "依据"], ...rows.map(row => [date(row.created_at), row.actor, auditLabels[row.action] || row.action, row.subject, row.note])]
     : tab.value === "members"
-      ? [["邮箱", "用户名", "来源", "准入", "平台状态", "平台账号编号", "加入时间"], ...rows.map(row => [row.email, row.username, sourceLabels[row.source] || row.source, row.status === "active" ? "永久有效" : "已停用", platformState(row), row.account_id, date(row.created_at)])]
+      ? [["邮箱", "用户名", "来源", "准入", "平台账号编号"], ...rows.map(row => [row.email, row.username, sourceLabels[row.source] || row.source, row.status === "active" ? "永久有效" : "已停用", row.account_id])]
       : [["邮箱", "用户名", "实验室名单", "来源", "收到时间", "审批", "审批人"], ...rows.map(row => [row.email, row.username, row.roster_match ? "名单内" : "未匹配导入名单", sourceLabels[row.source] || row.source, date(row.submitted_at), decisionLabels[row.status], row.reviewed_by])];
   const url = URL.createObjectURL(new Blob([encodeCsv(csv)], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -315,7 +310,6 @@ onUnmounted(() => window.clearInterval(timer));
 .is-danger { color: #bd353e; }
 .is-neutral { color: #657384; }
 .table-time { color: #677488; font-size: 12px; font-variant-numeric: tabular-nums; }
-.platform-state { color: #58697a; font-size: 12px; }
 .admission-footnote { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-top: 10px; color: #657384; font-size: 11px; line-height: 1.7; }
 .column-options { display: grid; gap: 4px; margin-bottom: 8px; }
 .column-options .el-checkbox { margin-right: 0; }

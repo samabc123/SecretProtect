@@ -1,1 +1,0 @@
-import{a7 as e}from"./index-CCNLrGU2.js";const o=()=>e.get("/overview/stats"),n=()=>e.get("/evaluation-report"),r=t=>e.get("/channels",{params:t}),a=t=>e.get("/backend-runs",{params:t}),c=(t=200)=>e.get(`/security/audit?limit=${t}`),g=()=>e.post("/backend/run-due"),p=()=>e.get("/reports/export",{responseType:"json"});export{a,o as b,n as c,c as d,p as e,r as g,g as r};

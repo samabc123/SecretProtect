@@ -73,9 +73,14 @@ def verify_responsive_layout(page, admission, origin):
         exported_rows = list(csv.reader(stream))
     assert len(exported_rows) == 46, "Export must include all filtered records, not only the current page"
     assert exported_rows[0][0:2] == ["邮箱", "用户名"]
+    assert "平台状态" not in exported_rows[0] and "加入时间" not in exported_rows[0]
+    for label in ("平台状态", "加入时间"):
+        expect(page.get_by_role("columnheader", name=label, exact=True)).to_have_count(0)
     columns_button = page.get_by_role("button", name="列设置", exact=True)
     columns_button.click()
     columns = page.get_by_role("group", name="显示的表格列", exact=True)
+    for label in ("平台状态", "加入时间"):
+        expect(columns.get_by_role("checkbox", name=label, exact=True)).to_have_count(0)
     columns.locator("label.el-checkbox").filter(has_text="平台账号编号").click()
     expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_have_count(0)
     columns_button.click()
@@ -126,6 +131,8 @@ def verify_responsive_layout(page, admission, origin):
         expect(page.get_by_text(long_email, exact=True)).to_be_visible()
         assert_layout(page, f"whitelist {width}x{height}")
         if width <= 900:
+            for label in ("平台状态", "加入时间"):
+                expect(page.get_by_text(label, exact=True)).to_have_count(0)
             expect(page.get_by_role("list", name="白名单人员列表").get_by_role("listitem")).to_have_count(1)
             expect(page.get_by_text("平台账号编号", exact=True)).to_be_visible()
             card = page.get_by_role("list", name="白名单人员列表").get_by_role("listitem")
@@ -362,7 +369,8 @@ def main():
                     import_dialog.get_by_role("button", name="确认导入", exact=True).click()
                     expect(import_dialog).not_to_be_visible()
                     expect(page.get_by_role("tabpanel", name="白名单").get_by_text("roster-browser@example.edu", exact=True)).to_be_visible()
-                    expect(page.get_by_text("待注册或确认申请", exact=True)).to_be_visible()
+                    imported_member = next(row for row in admission.dashboard()["members"] if row["email"] == "roster-browser@example.edu")
+                    assert imported_member["awaiting_registration"] and not imported_member["account_id"]
                     results.append("CSV template download, invalid-row rejection, duplicate preview and actual import; desktop/mobile fit; no fake account opening")
                     page.set_viewport_size({"width": 1440, "height": 1000})
                     page.get_by_role("tab", name="注册申请", exact=False).click()
@@ -378,7 +386,8 @@ def main():
                     expect(page.get_by_role("button", name="续期", exact=True)).to_have_count(0)
                     expect(page.get_by_role("button", name="撤销", exact=True)).to_have_count(0)
                     expect(page.get_by_text("永久有效", exact=True)).to_have_count(2)
-                    expect(page.get_by_text("待平台开通", exact=True)).to_be_visible()
+                    approved_member = next(row for row in admission.dashboard()["members"] if row["email"] == "student01@example.edu")
+                    assert approved_member["sync_state"] == "pending_create" and not approved_member["account_id"]
                     expect(page.get_by_text("平台已回执开通", exact=True)).to_have_count(0)
                     expect(page.locator(".el-message")).to_have_count(0)
                     page.screenshot(path=str(OUTPUT / "whitelist-desktop.png"), full_page=True)
