@@ -20,3 +20,13 @@ test("sorting covers the whole filtered set without mutating it", () => {
   assert.equal(rows[0].username, "user10");
   assert.equal(sortedRows(rows), rows);
 });
+
+test("platform IDs sort numerically without losing 64-bit precision; missing IDs remain last", () => {
+  const ids = ["9", "100", null, "9223372036854775806", "10", "9223372036854775807", "legacy-id"];
+  const rows = ids.map(account_id => ({ account_id }));
+  assert.deepEqual(sortedRows(rows, { prop: "account_id", order: "descending" }).map(row => row.account_id),
+    ["9223372036854775807", "9223372036854775806", "100", "10", "9", null, "legacy-id"]);
+  assert.deepEqual(sortedRows(rows, { prop: "account_id", order: "ascending" }).map(row => row.account_id),
+    ["9", "10", "100", "9223372036854775806", "9223372036854775807", null, "legacy-id"]);
+  assert.deepEqual(rows.map(row => row.account_id), ids);
+});

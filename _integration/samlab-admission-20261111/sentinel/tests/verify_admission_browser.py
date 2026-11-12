@@ -146,6 +146,77 @@ def verify_roster_restoration(page, admission, origin, original):
     expect(page.get_by_role("tabpanel", name="白名单").get_by_text("暂无已批准的 Samlab 人员")).to_be_visible()
 
 
+def verify_manual_member(page, admission, origin):
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(origin + "/admission")
+    page.get_by_role("button", name="手动添加", exact=True).click()
+    dialog = page.get_by_role("dialog", name="手动添加人员", exact=True)
+    expect(dialog.get_by_role("textbox")).to_have_count(3)
+    page.set_viewport_size({"width": 320, "height": 568})
+    dialog.get_by_role("button", name="检查信息", exact=True).click()
+    expect(dialog.get_by_text("请输入有效邮箱地址。", exact=True)).to_be_visible()
+    assert dialog.locator(".el-form-item__error").evaluate_all("""nodes => nodes.every(node => {
+      const field = node.closest('.el-form-item').getBoundingClientRect();
+      const error = node.getBoundingClientRect();
+      return error.bottom <= field.bottom + 1;
+    })"""), "Field errors must take up space instead of overlapping or extending beyond their fields"
+    assert_dialog_fit(page, dialog)
+    assert_layout(page, "manual-member-form-320")
+    page.screenshot(path=str(OUTPUT / "manual-member-form-mobile.png"), full_page=True)
+    dialog.get_by_role("textbox", name="人员用户名", exact=True).fill("手动测试人员")
+    dialog.get_by_role("textbox", name="人员邮箱", exact=True).fill("manual-browser@example.edu")
+    dialog.get_by_role("textbox", name="人员平台 ID", exact=True).fill("901")
+    dialog.get_by_role("button", name="检查信息", exact=True).click()
+    expect(dialog.get_by_role("button", name="确认添加", exact=True)).to_be_enabled()
+    assert not admission.dashboard()["members"], "Manual preview must not create a member"
+    assert_dialog_fit(page, dialog)
+    assert_layout(page, "manual-member-confirm-320")
+    page.screenshot(path=str(OUTPUT / "manual-member-confirm-mobile.png"), full_page=True)
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.screenshot(path=str(OUTPUT / "manual-member-confirm-desktop.png"), full_page=True)
+    dialog.get_by_role("button", name="返回修改", exact=True).click()
+    expect(dialog.get_by_role("textbox", name="人员平台 ID", exact=True)).to_have_value("901")
+    dialog.get_by_role("button", name="检查信息", exact=True).click()
+    dialog.get_by_role("button", name="确认添加", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("manual-browser@example.edu", exact=True)).to_be_visible()
+    expect(page.get_by_role("row").filter(has_text="manual-browser@example.edu").get_by_text("管理员手动添加", exact=True)).to_be_visible()
+    member = admission.dashboard()["members"][0]
+    assert member["source"] == "manual" and member["account_id"] == "901" and member["synced_version"] == 0
+    filters = page.get_by_role("button", name="筛选设置", exact=True)
+    filters.click()
+    page.locator(".el-select").filter(has=page.get_by_role("combobox", name="人员来源", exact=True)).click()
+    expect(page.get_by_role("option", name="管理员邀请开通", exact=True)).to_have_count(0)
+    page.get_by_role("option", name="管理员手动添加", exact=True).click()
+    filters.click()
+    expect(page.get_by_role("row").filter(has_text="manual-browser@example.edu")).to_be_visible()
+    choose_filter(page, "人员来源", "全部来源")
+    page.get_by_role("button", name="手动添加", exact=True).click()
+    expect(dialog.get_by_role("textbox", name="人员邮箱", exact=True)).to_have_value("")
+    for label, value in (("人员用户名", "手动测试人员"), ("人员邮箱", "manual-browser@example.edu"), ("人员平台 ID", "901")):
+        dialog.get_by_role("textbox", name=label, exact=True).fill(value)
+    dialog.get_by_role("button", name="检查信息", exact=True).click()
+    expect(dialog.get_by_role("button", name="确认添加", exact=True)).to_be_disabled()
+    dialog.get_by_role("button", name="取消", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    admission.delete_members([member["id"]], "synthetic-browser", "验证手动恢复白名单")
+    page.reload()
+    page.get_by_role("button", name="手动添加", exact=True).click()
+    for label, value in (("人员用户名", "手动测试人员"), ("人员邮箱", "manual-browser@example.edu"), ("人员平台 ID", "901")):
+        dialog.get_by_role("textbox", name=label, exact=True).fill(value)
+    dialog.get_by_role("button", name="检查信息", exact=True).click()
+    dialog.get_by_role("button", name="确认恢复", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    expect(page.get_by_role("tabpanel", name="白名单").get_by_text("manual-browser@example.edu", exact=True)).to_be_visible()
+    assert admission.dashboard()["members"][0]["id"] == member["id"]
+    assert admission.dashboard()["members"][0]["policy_version"] == 3
+    assert sum(a["action"] == "whitelist.manual_added" for a in admission.dashboard()["audits"]) == 1
+    admission.delete_members([member["id"]], "synthetic-browser", "清理合成手动添加人员")
+    page.reload()
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    expect(page.get_by_text("暂无已批准的 Samlab 人员", exact=True)).to_be_visible()
+
+
 def verify_responsive_layout(page, admission, origin):
     long_email = "long-address-" + "x" * 46 + "@" + "lab-" + "a" * 40 + "." + "b" * 40 + ".example.edu"
     rows = [f"layout-{index:02d}@example.edu,布局测试人员{index:02d},{index + 1000}" for index in range(44)]
@@ -158,6 +229,7 @@ def verify_responsive_layout(page, admission, origin):
     page.get_by_role("tab", name="白名单", exact=True).click()
     expect(page.locator(".pagination-summary")).to_contain_text("共 45 条")
     expect(page.locator(".el-table__body-wrapper:visible tbody tr")).to_have_count(20)
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr").first).to_contain_text("9223372036854775807")
     with page.expect_download() as exported:
         page.get_by_role("button", name="导出名单", exact=True).click()
     with exported.value.path().open(encoding="utf-8-sig", newline="") as stream:
@@ -165,6 +237,7 @@ def verify_responsive_layout(page, admission, origin):
     assert len(exported_rows) == 46, "Export must include all filtered records, not only the current page"
     assert exported_rows[0][0:2] == ["邮箱", "用户名"]
     id_index = exported_rows[0].index("平台账号编号")
+    assert [row[id_index] for row in exported_rows[1:4]] == ["9223372036854775807", "1043", "1042"]
     assert {row[id_index] for row in exported_rows[1:]} == {str(index + 1000) for index in range(44)} | {"9223372036854775807"}
     assert "平台状态" not in exported_rows[0] and "加入时间" not in exported_rows[0]
     for label in ("平台状态", "加入时间"):
@@ -175,16 +248,27 @@ def verify_responsive_layout(page, admission, origin):
     for label in ("平台状态", "加入时间"):
         expect(columns.get_by_role("checkbox", name=label, exact=True)).to_have_count(0)
     columns.locator("label.el-checkbox").filter(has_text="平台账号编号").click()
-    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_have_count(0)
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=False)).to_have_count(0)
     columns_button.click()
     page.reload()
     page.get_by_role("tab", name="白名单", exact=True).click()
-    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_have_count(0)
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=False)).to_have_count(0)
     columns_button.click()
     page.get_by_role("button", name="恢复默认列", exact=True).click()
     columns_button.click()
-    expect(page.get_by_role("columnheader", name="平台账号编号", exact=True)).to_be_visible()
+    expect(page.get_by_role("columnheader", name="平台账号编号", exact=False)).to_be_visible()
     expect(columns).not_to_be_visible()
+    page.locator("thead:visible label.el-checkbox").click()
+    page.get_by_role("columnheader", name="平台账号编号", exact=False).locator(".sort-caret.ascending").click()
+    expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_disabled()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr").first).to_contain_text("1000")
+    page.get_by_role("columnheader", name="平台账号编号", exact=False).locator(".sort-caret.descending").click()
+    expect(page.locator(".el-table__body-wrapper:visible tbody tr").first).to_contain_text("9223372036854775807")
+    page.reload()
+    page.get_by_role("tab", name="白名单", exact=True).click()
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(page.get_by_role("list", name="白名单人员列表").get_by_role("listitem").first).to_contain_text("9223372036854775807")
+    page.set_viewport_size({"width": 1440, "height": 1000})
     page.locator("thead:visible label.el-checkbox").click()
     page.get_by_role("columnheader", name="用户名", exact=False).click()
     expect(page.get_by_role("button", name="批量删除", exact=True)).to_be_disabled()
@@ -557,6 +641,8 @@ def main():
                     results.append("deleted roster reimport explicitly previews restore on desktop/320px/mobile; one confirmation restores the same identity permanently; deletion and restoration audits retained; duplicate reimport skipped")
                     verify_roster_id_backfill(page, admission, origin)
                     results.append("legacy roster ID-only backfill is enabled with zero new rows; same member ID retained, platform ID survives reload, repeated complete import is skipped")
+                    verify_manual_member(page, admission, origin)
+                    results.append("administrator manual addition: three-field validation; desktop/mobile preview and confirmation; manual source filter without invitation option; duplicates skipped; explicit restoration; no remote account or security administrator created")
                     page.goto(origin + "/administrators")
                     expect(page.get_by_role("heading", name="管理员", exact=True, level=2)).to_be_visible()
                     page.get_by_role("button", name="创建管理员", exact=True).click()
@@ -607,7 +693,7 @@ def main():
                     verify_security_workspace(page, origin)
                     results.append("security console shows persisted synthetic events with provenance; target explorer filters tasks and opens details; no scan triggered")
                     verify_responsive_layout(page, admission, origin)
-                    results.append("Sub2API-style viewport-filling table, fixed pagination, persisted column settings, full-set sorting clears selection and CSV export includes 45 records")
+                    results.append("Sub2API-style viewport-filling table, fixed pagination, persisted column settings; default ID-descending on desktop/mobile and exact 64-bit export; explicit sorting clears selection; CSV export includes 45 records")
                     results.append("45 synthetic members: pagination, page-selection reset, empty search, long names/emails, desktop/tablet/mobile/landscape, dialog footer, drawer and all existing route widths")
                     regular_context = browser.new_context()
                     regular = regular_context.new_page()

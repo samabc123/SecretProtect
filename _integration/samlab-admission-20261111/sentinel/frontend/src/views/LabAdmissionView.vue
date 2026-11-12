@@ -12,7 +12,7 @@
             <template #reference><el-button :icon="Filter" :aria-expanded="filtersVisible" aria-label="筛选设置">筛选设置<span v-if="filterCount" class="filter-count">{{ filterCount }}</span></el-button></template>
             <el-form label-position="top">
               <el-form-item v-if="tab === 'requests'" label="审批状态"><el-select v-model="requestStatus" aria-label="审批状态"><el-option label="全部审批状态" value="" /><el-option v-for="(label, value) in decisionLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item>
-              <el-form-item label="人员来源"><el-select v-model="source" aria-label="人员来源"><el-option label="全部来源" value="" /><el-option v-for="(label, value) in sourceLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item>
+              <el-form-item label="人员来源"><el-select v-model="source" aria-label="人员来源"><el-option label="全部来源" value="" /><el-option v-for="(label, value) in sourceOptions" :key="value" :label="label" :value="value" /></el-select></el-form-item>
               <el-button text :disabled="!filterCount" @click="requestStatus = ''; source = ''">重置筛选</el-button>
             </el-form>
           </el-popover>
@@ -22,6 +22,7 @@
             <el-button text @click="hiddenColumns[tab] = []">恢复默认列</el-button>
           </el-popover>
           <el-button v-if="tab === 'members'" :icon="Delete" type="danger" :plain="!selectedMembers.length" :disabled="!selectedMembers.length || loading || saving" @click="openRemoval(selectedMembers)">批量删除</el-button>
+          <el-button :icon="Plus" :disabled="saving" @click="manualVisible = true">手动添加</el-button>
           <el-button type="primary" :icon="Upload" @click="importVisible = true">导入名单</el-button>
         </div>
       </div>
@@ -31,7 +32,7 @@
       </div>
       <el-tabs v-model="tab" class="admission-tabs" @tab-change="filtersVisible = false; columnsVisible = false">
         <el-tab-pane :label="`注册申请（${pending.length} 待审批）`" name="requests">
-          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleRequests" :empty-text="emptyRequests" @sort-change="sortRows">
+          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleRequests" :empty-text="emptyRequests" @sort-change="sortRows($event, 'requests')">
             <el-table-column label="用户" prop="email" sortable="custom" fixed="left" width="300"><template #default="{ row }"><PersonIdentity email-first :name="row.username" :detail="row.email" /></template></el-table-column>
             <el-table-column v-if="isColumnVisible('username')" label="用户名" prop="username" sortable="custom" min-width="150" />
             <el-table-column v-if="isColumnVisible('roster_match')" label="实验室名单" min-width="160"><template #default="{ row }"><span :class="['admission-state', row.roster_match ? 'is-success' : 'is-neutral']">{{ row.roster_match ? '名单内' : '未匹配导入名单' }}</span></template></el-table-column>
@@ -64,13 +65,13 @@
             <el-checkbox :model-value="allPageSelected" :indeterminate="selectedMembers.length > 0 && !allPageSelected" @change="selectPage">选择本页</el-checkbox>
             <span>已选择 {{ selectedMembers.length }} 人</span>
           </div>
-          <el-table v-if="!compact" class="management-table" height="100%" ref="memberTable" row-key="id" :data="visibleMembers" :empty-text="emptyMembers" @selection-change="selectedMembers = $event" @sort-change="sortRows">
+          <el-table v-if="!compact" class="management-table" height="100%" ref="memberTable" row-key="id" :data="visibleMembers" :default-sort="sorts.members.order ? sorts.members : memberDefaultSort" :empty-text="emptyMembers" @selection-change="selectedMembers = $event" @sort-change="sortRows($event, 'members')">
             <el-table-column type="selection" width="52" fixed="left" />
             <el-table-column label="用户" prop="email" sortable="custom" fixed="left" width="300"><template #default="{ row }"><PersonIdentity email-first :name="row.username" :detail="row.email" /></template></el-table-column>
             <el-table-column v-if="isColumnVisible('username')" label="用户名" prop="username" sortable="custom" min-width="150" />
             <el-table-column v-if="isColumnVisible('source')" label="来源" min-width="160"><template #default="{ row }"><span class="source-label">{{ sourceLabels[row.source] || '用户申请' }}</span></template></el-table-column>
             <el-table-column v-if="isColumnVisible('status')" label="准入" width="120"><template #default="{ row }"><span :class="['admission-state', row.status === 'active' ? 'is-success' : 'is-danger']">{{ row.status === "active" ? "永久有效" : "已停用" }}</span></template></el-table-column>
-            <el-table-column v-if="isColumnVisible('account_id')" label="平台账号编号" min-width="150"><template #default="{ row }">{{ row.account_id || '尚未关联' }}</template></el-table-column>
+            <el-table-column v-if="isColumnVisible('account_id')" label="平台账号编号" prop="account_id" sortable="custom" min-width="150"><template #default="{ row }">{{ row.account_id || '尚未关联' }}</template></el-table-column>
             <el-table-column label="操作" fixed="right" width="110"><template #default="{ row }">
               <el-button :icon="Delete" text type="danger" :disabled="saving" @click="openRemoval([row])">删除</el-button>
             </template></el-table-column>
@@ -94,7 +95,7 @@
           </template>
         </el-tab-pane>
         <el-tab-pane label="审批审计" name="audit">
-          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleAudits" :empty-text="emptyAudits" @sort-change="sortRows">
+          <el-table v-if="!compact" class="management-table" height="100%" :data="visibleAudits" :empty-text="emptyAudits" @sort-change="sortRows($event, 'audit')">
             <el-table-column label="时间" prop="created_at" sortable="custom" fixed="left" width="200"><template #default="{ row }"><span class="table-time">{{ date(row.created_at) }}</span></template></el-table-column>
             <el-table-column v-if="isColumnVisible('actor')" prop="actor" label="操作人" sortable="custom" min-width="145" />
             <el-table-column v-if="isColumnVisible('action')" label="操作" min-width="210"><template #default="{ row }">{{ auditLabels[row.action] || row.action }}</template></el-table-column>
@@ -118,7 +119,7 @@
       </el-tabs>
       <PaginationBar table-style v-model:page="currentPage" v-model:page-size="pageSize" :total="activeRows.length" />
       <footer class="admission-footnote">
-        <span>{{ tab === 'audit' ? '审计列表最多显示最近 100 条' : `列表最多显示最近 ${data.list_limit} 条` }}<template v-if="data.legacy_people_count"> · 历史试点身份 {{ data.legacy_people_count }} 条，未自动映射</template></span>
+        <span>{{ tab === 'audit' ? '审计列表最多显示最近 100 条' : tab === 'members' ? `列表最多显示 ${data.list_limit} 人` : `列表最多显示最近 ${data.list_limit} 条` }}<template v-if="data.legacy_people_count"> · 历史试点身份 {{ data.legacy_people_count }} 条，未自动映射</template></span>
         <span :title="updated">最近刷新 {{ updated ? updated.split(' ')[1] : '尚未刷新' }} · 服务签名{{ data.integration.signature_configured ? '已配置' : '未配置' }}</span>
       </footer>
       <el-dialog v-model="reviewVisible" title="注册准入审批" width="480px" class="samlab-dialog management-dialog" align-center :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
@@ -136,6 +137,7 @@
         <template #footer><el-button :disabled="saving" @click="removalVisible = false">取消</el-button><el-button type="danger" :icon="Delete" :loading="saving" :disabled="!confirmed || note.trim().length < 5" @click="remove">确认删除</el-button></template>
       </el-dialog>
       <RosterImportDialog v-model="importVisible" @imported="tab = 'members'; load()" />
+      <ManualMemberDialog v-model="manualVisible" @saved="tab = 'members'; query = ''; source = ''; load()" />
     </main>
   </AppLayout>
 </template>
@@ -143,8 +145,9 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { Delete, Download, EditPen, Filter, Operation, Refresh, Search, TopRight, Upload, Warning } from "@element-plus/icons-vue";
+import { Delete, Download, EditPen, Filter, Operation, Plus, Refresh, Search, TopRight, Upload, Warning } from "@element-plus/icons-vue";
 import RosterImportDialog from "../components/RosterImportDialog.vue";
+import ManualMemberDialog from "../components/ManualMemberDialog.vue";
 import AppLayout from "../components/AppLayout.vue";
 import PaginationBar from "../components/PaginationBar.vue";
 import PersonIdentity from "../components/PersonIdentity.vue";
@@ -157,7 +160,7 @@ const loading = ref(false), saving = ref(false), error = ref(""), query = ref(""
 const selected = ref(null), decision = ref(""), reviewVisible = ref(false), dialogError = ref("");
 const removalVisible = ref(false), removalTargets = ref([]), note = ref(""), confirmed = ref(false);
 const memberTable = ref(null), selectedMembers = ref([]);
-const importVisible = ref(false);
+const importVisible = ref(false), manualVisible = ref(false);
 const requestStatus = ref(""), source = ref("");
 const filtersVisible = ref(false), columnsVisible = ref(false);
 const hiddenColumns = reactive({ requests: [], members: [], audit: [] });
@@ -181,10 +184,11 @@ function toggleColumn(key, checked) {
   hiddenColumns[tab.value] = checked ? hiddenColumns[tab.value].filter(value => value !== key) : [...hiddenColumns[tab.value], key];
 }
 const filterCount = computed(() => Number(Boolean(source.value)) + Number(tab.value === "requests" && Boolean(requestStatus.value)));
-const sorts = reactive({ requests: {}, members: {}, audit: {} });
-function sortRows({ prop, order }) {
-  sorts[tab.value] = { prop, order };
-  currentPage.value = 1;
+const memberDefaultSort = { prop: "account_id", order: "descending" };
+const sorts = reactive({ requests: {}, members: { ...memberDefaultSort }, audit: {} });
+function sortRows({ prop, order }, target = tab.value) {
+  sorts[target] = { prop, order };
+  pages[target] = 1;
   clearSelection();
 }
 const pending = computed(() => data.requests.filter(r => r.status === "pending"));
@@ -198,7 +202,8 @@ const filteredAudits = computed(() => {
 });
 const activeRows = computed(() => ({ requests: filteredRequests.value, members: filteredMembers.value, audit: filteredAudits.value })[tab.value]);
 const currentPage = computed({ get: () => pages[tab.value], set: value => { pages[tab.value] = value; } });
-const pageRows = rows => sortedRows(rows, sorts[tab.value]).slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value);
+const currentSort = computed(() => tab.value === "members" && !sorts.members.order ? memberDefaultSort : sorts[tab.value]);
+const pageRows = rows => sortedRows(rows, currentSort.value).slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value);
 const visibleRequests = computed(() => tab.value === "requests" ? pageRows(filteredRequests.value) : []);
 const visibleMembers = computed(() => tab.value === "members" ? pageRows(filteredMembers.value) : []);
 const visibleAudits = computed(() => tab.value === "audit" ? pageRows(filteredAudits.value) : []);
@@ -208,13 +213,14 @@ const emptyRequests = computed(() => query.value.trim() || source.value || reque
 const emptyMembers = computed(() => query.value.trim() || source.value ? "没有匹配的白名单人员" : "暂无已批准的 Samlab 人员");
 const emptyAudits = computed(() => query.value.trim() ? "没有匹配的审批审计" : "暂无审批审计");
 const decisionLabels = { pending: "待审批", approved: "已同意", rejected: "不同意" };
-const sourceLabels = { self: "用户申请", admin_direct: "管理员直接创建", admin_invite: "管理员邀请开通", roster: "文件导入" };
-const auditLabels = { "whitelist.imported": "导入名单人员", "whitelist.id_imported": "补录平台 ID", "whitelist.restored": "重新导入恢复白名单", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "历史撤销准入", "whitelist.deleted": "删除白名单人员", "whitelist.batch_deleted": "批量删除白名单人员", "whitelist.permanent_enabled": "转为永久白名单", "whitelist.legacy_deleted": "合并历史停用状态", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
+const sourceOptions = { self: "用户申请", admin_direct: "管理员直接创建", manual: "管理员手动添加", roster: "文件导入" };
+const sourceLabels = { ...sourceOptions, admin_invite: "历史邀请记录" };
+const auditLabels = { "whitelist.imported": "导入名单人员", "whitelist.id_imported": "补录平台 ID", "whitelist.manual_added": "管理员手动添加人员", "member.manual.committed": "确认手动添加批次", "whitelist.restored": "恢复白名单", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "历史撤销准入", "whitelist.deleted": "删除白名单人员", "whitelist.batch_deleted": "批量删除白名单人员", "whitelist.permanent_enabled": "转为永久白名单", "whitelist.legacy_deleted": "合并历史停用状态", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
 const date = value => value ? new Date(value * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
 const decisionType = value => ({ pending: "warning", approved: "success", rejected: "danger" })[value];
 function filtered(rows) { const q = query.value.trim().toLowerCase(); return rows.filter(r => (!q || `${r.username} ${r.email}`.toLowerCase().includes(q)) && (!source.value || r.source === source.value)); }
 function exportRows() {
-  const rows = sortedRows(activeRows.value, sorts[tab.value]);
+  const rows = sortedRows(activeRows.value, currentSort.value);
   const csv = tab.value === "audit"
     ? [["时间", "操作人", "操作", "关联编号", "依据"], ...rows.map(row => [date(row.created_at), row.actor, auditLabels[row.action] || row.action, row.subject, row.note])]
     : tab.value === "members"
@@ -270,7 +276,7 @@ async function remove() {
   finally { saving.value = false; }
 }
 let timer;
-onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !importVisible.value && !filtersVisible.value && !columnsVisible.value && !selectedMembers.value.length) load(true); }, 15000); });
+onMounted(() => { load(); timer = window.setInterval(() => { if (!document.hidden && !reviewVisible.value && !removalVisible.value && !importVisible.value && !manualVisible.value && !filtersVisible.value && !columnsVisible.value && !selectedMembers.value.length) load(true); }, 15000); });
 onUnmounted(() => window.clearInterval(timer));
 </script>
 

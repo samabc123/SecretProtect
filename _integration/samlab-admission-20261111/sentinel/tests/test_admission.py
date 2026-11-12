@@ -536,6 +536,131 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200, result.text)
         return result.json()
 
+    def preview_member(self, **changes):
+        return self.write("/api/lab/admin/members/preview", {
+            "username": "手动添加人员", "email": "manual@example.edu", "account_id": "201", **changes,
+        })
+
+    def add_member(self, **changes):
+        staged = self.preview_member(**changes)
+        self.assertEqual(staged.status_code, 200, staged.text)
+        result = self.write("/api/lab/admin/roster/commit", {"batch_id": staged.json()["batch_id"]})
+        self.assertEqual(result.status_code, 200, result.text)
+        return result.json()
+
+    def test_manual_member_add_requires_admin_csrf_and_cannot_choose_source(self):
+        body = {"username": "测试", "email": "manual@example.edu", "account_id": "201"}
+        with self.client() as anon:
+            self.assertEqual(anon.post("/api/lab/admin/members/preview", json=body).status_code, 401)
+        self.assertEqual(self.admin.post("/api/lab/admin/members/preview", json=body).status_code, 403)
+        for extra in ({"source": "admin_invite"}, {"password": "synthetic-only"}, {"is_superadmin": True}):
+            self.assertEqual(self.write("/api/lab/admin/members/preview", {**body, **extra}).status_code, 422)
+        self.assertEqual(self.store.dashboard()["members"], [])
+
+    def test_manual_member_validation_reports_all_invalid_fields(self):
+        result = self.preview_member(username="", email="bad-email", account_id="01")
+        self.assertEqual(result.status_code, 400, result.text)
+        self.assertEqual({e["field"] for e in result.json()["field_errors"]}, {"username", "email", "account_id"})
+        for value in ("9223372036854775808", "0", "-1", "1e3", "1.0"):
+            response = self.preview_member(account_id=value)
+            self.assertEqual(response.status_code, 400, response.text)
+            self.assertEqual(response.json()["field_errors"][0]["field"], "account_id")
+        self.assertEqual(self.preview_member(account_id=201).status_code, 422, "IDs must remain strings")
+        self.assertEqual(self.preview_member(username="x" * 101).status_code, 422)
+
+    def test_manual_member_confirm_is_atomic_idempotent_and_preserves_provenance(self):
+        staged = self.preview_member(username=" 测试 ", email=" MANUAL@example.edu ", account_id=" 201 ").json()
+        self.assertEqual(staged["summary"]["add"], 1)
+        self.assertEqual(self.store.dashboard()["members"], [], "Checking information must not grant access")
+        body = {"batch_id": staged["batch_id"]}
+        first = self.write("/api/lab/admin/roster/commit", body)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", body).json(), first.json())
+        data = self.store.dashboard()
+        self.assertEqual(len(data["members"]), 1)
+        member = data["members"][0]
+        self.assertEqual((member["username"], member["email"], member["account_id"], member["source"]),
+                         ("测试", "manual@example.edu", "201", "manual"))
+        self.assertEqual((member["status"], member["expires_at"], member["sync_state"], member["synced_version"]),
+                         ("active", None, "pending_create", 0))
+        self.assertTrue(member["awaiting_registration"])
+        self.assertEqual(data["requests"], [])
+        self.assertEqual(sum(a["action"] == "whitelist.manual_added" for a in data["audits"]), 1)
+        self.assertEqual(sum(a["action"] == "member.manual.committed" for a in data["audits"]), 1)
+        self.assertFalse(any(a["action"] == "whitelist.imported" for a in data["audits"]))
+        self.assertEqual(self.add_member()["summary"]["skip"], 1)
+        self.store.delete_members([member["id"]], "user:admin", "已确认人员离组")
+        self.assertEqual(self.write("/api/lab/admin/roster/commit", body).json(), first.json())
+        self.assertEqual(self.store.dashboard()["members"], [], "Old confirmation cannot restore a later deletion")
+
+    def test_manual_add_and_csv_share_conflict_guards_and_restoration(self):
+        self.add_member()
+        for changes in ({"email": "other@example.edu"}, {"account_id": "202"}):
+            staged = self.preview_member(**changes).json()
+            self.assertEqual(staged["summary"]["error"], 1)
+            self.assertEqual(self.write("/api/lab/admin/roster/commit", {
+                "batch_id": staged["batch_id"]}).status_code, 409)
+        original = self.store.dashboard()["members"][0]
+        self.store.delete_members([original["id"]], "user:admin", "已确认人员离组")
+        self.assertEqual(self.import_roster(
+            "用户名,邮箱,ID\n手动添加人员,manual@example.edu,201\n")["summary"]["restore"], 1)
+        restored = self.store.dashboard()["members"][0]
+        self.assertEqual((restored["id"], restored["source"]), (original["id"], "manual"))
+        self.store.delete_members([original["id"]], "user:admin", "再次确认人员离组")
+        self.assertEqual(self.add_member()["summary"]["restore"], 1)
+        self.assertEqual(self.store.dashboard()["members"][0]["policy_version"], 5)
+
+    def test_manual_add_does_not_enable_self_takeover_but_allows_matching_signed_admin_delivery(self):
+        self.add_member(email="admin-created@example.edu", account_id="123")
+        original = self.store.dashboard()["members"][0]
+        self.submit(self.application(email=original["email"]))
+        self.assertTrue(self.store.dashboard()["requests"][0]["roster_match"])
+        self.assertEqual(self.write("/api/lab/admin/requests/req-01/review", {"decision": "approved"}).status_code, 409)
+        mismatch = self.direct_account(request_id="admin-account-124", username="samlab_u124",
+                                       person_no="account:124", account_id="124")
+        self.assertEqual(self.signed("POST", PREFIX + "/admin-provision", mismatch).status_code, 409)
+        response = self.signed("POST", PREFIX + "/admin-provision", self.direct_account())
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["member_id"], original["id"])
+        self.assertTrue(response.json()["allowed"])
+
+    def test_manual_add_rolls_back_when_audit_fails(self):
+        staged = self.preview_member().json()["batch_id"]
+        with patch.object(SamlabAdmissionStore, "_audit", side_effect=sqlite3.OperationalError("synthetic audit failure")):
+            response = self.write("/api/lab/admin/roster/commit", {"batch_id": staged})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.store.dashboard()["members"], [])
+        self.assertEqual(self.store.dashboard()["audits"], [])
+
+    def test_manual_and_csv_concurrent_batches_cannot_reassign_one_platform_id(self):
+        from app.roster_import import commit
+        manual = self.preview_member().json()["batch_id"]
+        csv_batch = self.preview_roster("username,email,id\n其他人,other@example.edu,201\n").json()["batch_id"]
+
+        def attempt(batch):
+            try:
+                commit(self.store, batch, "user:admin")
+                return 200
+            except AuthError as error:
+                return error.status_code
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(attempt, (manual, csv_batch)))
+        self.assertEqual(sorted(results), [200, 409])
+        self.assertEqual(len(self.store.dashboard()["members"]), 1)
+
+    def test_dashboard_prioritizes_larger_numeric_platform_ids_before_limiting(self):
+        self.legacy_roster()
+        rows = [f"人员{index},sort{index}@example.edu,{index}" for index in range(1, 502)]
+        rows += ["较大ID,large@example.edu,9223372036854775806", "最大ID,max@example.edu,9223372036854775807"]
+        self.import_roster("username,email,id\n" + "\n".join(reversed(rows)) + "\n")
+        members = self.store.dashboard()["members"]
+        self.assertEqual(len(members), 500)
+        self.assertEqual([row["account_id"] for row in members[:4]],
+                         ["9223372036854775807", "9223372036854775806", "501", "500"])
+        self.assertEqual(members[-1]["account_id"], "4")
+        self.assertFalse(any(row["account_id"] is None for row in members))
+
     def legacy_roster(self, email="legacy@example.edu", username="旧名单人员"):
         # Old two-column imports have no platform ID; keep migration tests explicit.
         member_id = secrets.token_hex(16)

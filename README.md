@@ -104,6 +104,17 @@ creation, login and API access remain distinct operations. Session expiry,
 administrator account disabling and the worker's short authorization lease are
 unchanged.
 
+Whitelist listings default to descending numeric platform account ID, with
+unlinked entries last; the backend applies this ordering before its 500-person
+limit. Sorting and exports retain exact 64-bit IDs. Administrators can also
+add a person manually using username, email and existing platform ID. Checking
+the form creates a short-lived administrator-owned preview; confirmation uses
+the same transactional, idempotent conflict and restoration checks as CSV.
+New manual records have a distinct `manual` source and audit trail, and do not
+create security administrators or claim a remote account has been provisioned.
+The source filter no longer offers administrator invitations; historical
+invitation records and the signed platform compatibility contract are retained.
+
 Administrators can select the displayed rows and delete up to 500 members in
 one atomic operation. Single and batch deletion share the same logic, require
 confirmation and a reason, preserve audit records and queue account/session/API

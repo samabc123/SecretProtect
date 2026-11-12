@@ -35,15 +35,20 @@ def resolve_header(value):
     return "account_id" if normalized in ID_HEADERS else HEADERS.get(normalized)
 
 
-def field_error(email, username, account_id):
+def member_field_errors(email, username, account_id):
+    errors = {}
     if not 3 <= len(email) <= 180 or not EMAIL.fullmatch(email) or ".." in email:
-        return "邮箱格式无效或超过 180 个字符。"
+        errors["email"] = "邮箱格式无效或超过 180 个字符。"
     if (not 1 <= len(username) <= 100 or any(ord(ch) < 32 for ch in username)
             or username.startswith(("=", "+", "-", "@"))):
-        return "用户名必填，须为 1 至 100 个字符，不能含控制符或公式前缀。"
+        errors["username"] = "用户名必填，须为 1 至 100 个字符，不能含控制符或公式前缀。"
     if not ACCOUNT_ID.fullmatch(account_id) or int(account_id) > MAX_ACCOUNT_ID:
-        return "平台 ID 必填，须为 1 至 9223372036854775807 的整数，不能含前导零。"
-    return ""
+        errors["account_id"] = "平台 ID 必填，须为 1 至 9223372036854775807 的整数，不能含前导零。"
+    return errors
+
+
+def field_error(email, username, account_id):
+    return next(iter(member_field_errors(email, username, account_id).values()), "")
 
 
 def initialize(c):
@@ -145,7 +150,10 @@ def summary(rows):
 
 
 def preview(store, raw, actor):
-    rows = parse_csv(raw)
+    return preview_rows(store, parse_csv(raw), actor)
+
+
+def preview_rows(store, rows, actor):
     with store.connect() as c:
         c.execute("BEGIN IMMEDIATE")
         initialize(c)
@@ -181,6 +189,8 @@ def commit(store, batch_id, actor):
                     before.get("state") != "restore" or before.get("member_id") != current["member_id"]
                     or before.get("policy_version") != current["policy_version"]):
                 raise AuthError("人员准入状态在预览后发生变化，请重新预览并确认恢复白名单。", 409)
+        manual = all(row.get("entry_source") == "manual" for row in items)
+        context = f"手动添加批次 {batch_id}" if manual else f"CSV 批次 {batch_id}"
         now = time.time()
         for item in items:
             if item["state"] == "restore":
@@ -188,7 +198,7 @@ def commit(store, batch_id, actor):
                           "account_id=?,policy_version=policy_version+1,sync_state='pending_create',updated_at=? "
                           "WHERE id=?", (item["account_id"], now, item["member_id"]))
                 store._audit(c, actor, "whitelist.restored", item["member_id"],
-                             f"CSV 批次 {batch_id}；重新导入恢复永久准入；平台 ID {item['account_id']}；"
+                             f"{context}；重新添加恢复永久准入；平台 ID {item['account_id']}；"
                              "保留原人员、账号绑定和删除审计；未确认远端权限已恢复。")
                 continue
             if item["state"] == "update":
@@ -196,18 +206,20 @@ def commit(store, batch_id, actor):
                 c.execute("UPDATE samlab_members SET account_id=?,updated_at=? WHERE id=?",
                           (item["account_id"], now, existing["id"]))
                 store._audit(c, actor, "whitelist.id_imported", existing["id"],
-                             f"CSV 批次 {batch_id}；补录平台 ID {item['account_id']}；未修改准入或确认远端账号状态。")
+                             f"{context}；补录平台 ID {item['account_id']}；未修改准入或确认远端账号状态。")
                 continue
             if item["state"] != "add":
                 continue
             member_id = str(uuid.uuid4())
+            source = "manual" if manual else "roster"
             c.execute("INSERT INTO samlab_members(id,person_no,username,email,status,created_at,updated_at,"
-                      "source,display_username,account_id) VALUES (?,?,?,?,'active',?,?,'roster',?,?)",
+                      "source,display_username,account_id) VALUES (?,?,?,?,'active',?,?,?,?,?)",
                       (member_id, f"member:{member_id}", f"roster_{uuid.uuid4().hex}", item["email"],
-                       now, now, item["username"], item["account_id"]))
-            store._audit(c, actor, "whitelist.imported", member_id,
-                         f"CSV 批次 {batch_id}；导入平台 ID {item['account_id']}；不代表邮箱验证或账号已开通。")
+                       now, now, source, item["username"], item["account_id"]))
+            store._audit(c, actor, "whitelist.manual_added" if manual else "whitelist.imported", member_id,
+                         f"{context}；记录平台 ID {item['account_id']}；不代表邮箱验证或账号已开通。")
         result = {"batch_id": batch_id, "summary": summary(items), "rows": items}
-        store._audit(c, actor, "roster.import.committed", batch_id, json.dumps(result["summary"]))
+        store._audit(c, actor, "member.manual.committed" if manual else "roster.import.committed",
+                     batch_id, json.dumps(result["summary"]))
         c.execute("UPDATE samlab_import_batches SET result_json=? WHERE id=?", (json.dumps(result), batch_id))
         return result

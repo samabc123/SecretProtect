@@ -189,7 +189,7 @@ class SamlabAdmissionStore:
                 now, member_id = time.time(), str(uuid.uuid4())
                 imported = c.execute("SELECT * FROM samlab_members WHERE email=?", (email,)).fetchone()
                 if imported:
-                    if (imported["source"] != "roster" or imported["account_id"] not in (None, account_id)
+                    if (imported["source"] not in {"roster", "manual"} or imported["account_id"] not in (None, account_id)
                             or imported["status"] != "active" or imported["deleted_at"] is not None
                             or c.execute("SELECT 1 FROM samlab_requests WHERE member_id=?", (imported["id"],)).fetchone()):
                         raise AuthError("邮箱已有绑定或准入已失效，未覆盖原策略。", 409)
@@ -252,7 +252,7 @@ class SamlabAdmissionStore:
                     existing = c.execute("SELECT * FROM samlab_members WHERE email=?", (row["email"],)).fetchone()
                     if existing:
                         member_id = existing["id"]
-                        if existing["source"] == "roster":
+                        if existing["source"] in {"roster", "manual"}:
                             if existing["account_id"] is not None or c.execute(
                                     "SELECT 1 FROM samlab_requests WHERE member_id=?", (existing["id"],)).fetchone():
                                 raise AuthError("该邮箱已绑定账号，请使用原账号或由管理员核实迁移。", 409)
@@ -347,13 +347,14 @@ class SamlabAdmissionStore:
             legacy_tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             legacy_count = c.execute("SELECT COUNT(*) FROM lab_people").fetchone()[0] if "lab_people" in legacy_tables else 0
             members = []
-            for row in c.execute("SELECT * FROM samlab_members WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 500"):
+            for row in c.execute("SELECT * FROM samlab_members WHERE deleted_at IS NULL "
+                                 "ORDER BY account_id IS NULL,CAST(account_id AS INTEGER) DESC,updated_at DESC,id LIMIT 500"):
                 item = dict(row)
                 if item["source"] != "self":
-                    item["username"] = item["display_username"] or ("未注册" if item["source"] == "roster" else item["username"])
+                    item["username"] = item["display_username"] or ("未注册" if item["source"] in {"roster", "manual"} else item["username"])
                     if item["person_no"].startswith("account:"):
                         item["person_no"] = ""
-                item["awaiting_registration"] = item["source"] == "roster" and not c.execute(
+                item["awaiting_registration"] = item["source"] in {"roster", "manual"} and not c.execute(
                     "SELECT 1 FROM samlab_requests WHERE member_id=?", (item["id"],)).fetchone()
                 members.append(item)
             requests = []
@@ -364,7 +365,7 @@ class SamlabAdmissionStore:
                     if item["person_no"].startswith("account:"):
                         item["person_no"] = ""
                 item["roster_match"] = bool(c.execute(
-                    "SELECT 1 FROM samlab_members WHERE email=? AND source='roster' AND status='active' "
+                    "SELECT 1 FROM samlab_members WHERE email=? AND source IN ('roster','manual') AND status='active' "
                     "AND deleted_at IS NULL", (item["email"],)).fetchone())
                 requests.append(item)
             return {

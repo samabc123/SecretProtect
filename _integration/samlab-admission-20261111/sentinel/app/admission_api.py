@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, field_validator
 from starlette.requests import ClientDisconnect
 
 from .auth import safe_validation_detail
@@ -67,6 +67,17 @@ class BatchRemoval(Removal):
 
 class ImportCommit(Body):
     batch_id: str = Field(pattern=r"^[A-Za-z0-9_-]{32}$")
+
+
+class ManualMember(Body):
+    username: str = Field(strict=True, max_length=100)
+    email: str = Field(strict=True, max_length=180)
+    account_id: str = Field(strict=True, max_length=19)
+
+    @field_validator("username", "email", "account_id", mode="before")
+    @classmethod
+    def trim_fields(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class Acknowledgement(Body):
@@ -185,6 +196,19 @@ def install_admission(app: FastAPI):
     @app.post("/api/lab/admin/roster/commit")
     def roster_commit(body: ImportCommit, actor: str = Depends(admin)):
         return roster_import.commit(store, body.batch_id, actor)
+
+    @app.post("/api/lab/admin/members/preview")
+    def manual_member_preview(body: ManualMember, actor: str = Depends(admin)):
+        email = body.email.lower()
+        errors = roster_import.member_field_errors(email, body.username, body.account_id)
+        if errors:
+            return JSONResponse({"detail": "请检查人员信息。",
+                                 "field_errors": [{"field": key, "message": message} for key, message in errors.items()]},
+                                status_code=400)
+        return roster_import.preview_rows(store, [{
+            "line": 1, "email": email, "username": body.username, "account_id": body.account_id,
+            "error": "", "entry_source": "manual",
+        }], actor)
 
     @app.post("/api/lab/admin/requests/{request_id}/review")
     def review(request_id: str, body: Review, actor: str = Depends(admin)):
