@@ -11,6 +11,7 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from itertools import permutations
 from pathlib import Path
 from unittest.mock import patch
 
@@ -653,6 +654,38 @@ class AdmissionTests(unittest.TestCase):
             response = self.preview_roster(text)
             self.assertEqual(response.status_code, 400, response.text)
             self.assertIn("用户名、邮箱、ID", response.json()["detail"])
+
+    def test_roster_header_aliases_support_all_orders_case_spacing_and_fullwidth(self):
+        from app.roster_import import parse_csv
+        aliases = ("id", "ID", "用户id", "用户 ID", "用 户 ＩＤ", "UserId", "USER ID", "user_id",
+                   "user-id", "UID", "账号id", "账户ID", "平台ID", "平台用户_id", "平台账号ID",
+                   "平台账户 ID", "实验室平台id", "platform_user_id", "account_id", "Samlab ID",
+                   "平台账号编号", "成员id", "人员ID", "Samlab用户ID")
+        for alias in aliases:
+            for order in permutations(((alias, "123"), ("用户名", "张三"), ("邮箱", "test@example.edu"))):
+                with self.subTest(alias=alias, order=[column[0] for column in order]):
+                    header = ",".join(column[0] for column in order)
+                    data = ",".join(column[1] for column in order)
+                    row = parse_csv((header + "\n" + data + "\n").encode("utf-8-sig"))[0]
+                    self.assertEqual((row["username"], row["email"], row["account_id"], row["error"]),
+                                     ("张三", "test@example.edu", "123", ""))
+        row = parse_csv(b" E-MAIL , User_Name , uSeR_ID \ntest@example.edu,test,123\n")[0]
+        self.assertEqual((row["email"], row["username"], row["account_id"]), ("test@example.edu", "test", "123"))
+
+    def test_roster_id_header_detection_does_not_guess_unrelated_identifiers(self):
+        from app.roster_import import parse_csv
+        for alias in ("group_id", "request_id", "member_id", "application_id", "paid", "身份证ID", "学号ID"):
+            with self.subTest(alias=alias), self.assertRaises(AuthError):
+                parse_csv(f"username,email,{alias}\n测试,test@example.edu,123\n".encode())
+        for aliases in ("id,用户id", "USER ID,account_id", "平台 ID,平台账号编号"):
+            with self.subTest(aliases=aliases), self.assertRaisesRegex(AuthError, "多个 ID 列"):
+                parse_csv(f"username,email,{aliases}\n测试,test@example.edu,123,123\n".encode())
+
+    def test_roster_reordered_user_id_alias_is_imported_and_displayed(self):
+        self.import_roster("邮箱,用户id,用户名\nalias@example.edu,321,张三\n")
+        member = self.store.dashboard()["members"][0]
+        self.assertEqual((member["email"], member["username"], member["account_id"]),
+                         ("alias@example.edu", "张三", "321"))
 
     def test_roster_id_and_username_are_required_and_bounded(self):
         invalid_ids = ["", "0", "-1", "01", "1.0", "1e3", "=101", "１２３", "abc",

@@ -75,7 +75,11 @@ revision does not claim complete detection coverage or production integration.
 
 Roster CSV files require `username` / `用户名`, `email` / `邮箱` and `id` / `ID`
 columns, in any order. ID is the existing Samlab user ID (a positive signed
-64-bit integer), not the security service's member ID. Passwords, student
+64-bit integer), not the security service's member ID. Headers such as
+`用户id`, `用户 ID`, `user_id`, `UID` and `平台ID` are also accepted; matching
+ignores case, whitespace, underscores, hyphens and full-width forms.
+Multiple ID columns and unrelated identifiers such as `group_id` or
+`request_id` are rejected instead of guessed. Passwords, student
 numbers and expiry columns are rejected. Imported IDs are displayed in the
 whitelist but do not verify mailbox ownership, provision accounts or confirm
 remote account status.

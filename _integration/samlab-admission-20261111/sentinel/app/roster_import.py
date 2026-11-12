@@ -8,6 +8,7 @@ import json
 import re
 import secrets
 import time
+import unicodedata
 import uuid
 
 from .auth_store import AuthError
@@ -17,11 +18,21 @@ MAX_BYTES = 1024 * 1024
 MAX_ROWS = 2000
 HEADERS = {
     "邮箱": "email", "email": "email", "用户名": "username", "username": "username",
-    "id": "account_id", "平台id": "account_id", "平台账号id": "account_id",
-    "平台账号编号": "account_id", "account_id": "account_id",
+    "平台账号编号": "account_id",
+}
+ID_HEADERS = {
+    "id", "uid", "userid", "accountid", "platformid", "platformuserid", "platformaccountid", "samlabid",
+    "用户id", "人员id", "成员id", "账号id", "账户id", "平台id", "平台用户id", "平台账号id",
+    "平台账户id", "实验室平台id", "samlab用户id",
 }
 ACCOUNT_ID = re.compile(r"[1-9][0-9]{0,18}\Z")
 MAX_ACCOUNT_ID = 9223372036854775807
+
+
+def resolve_header(value):
+    # Match known user-account identifiers, not unrelated fields such as group_id or request_id.
+    normalized = re.sub(r"[\s_-]+", "", unicodedata.normalize("NFKC", value).casefold())
+    return "account_id" if normalized in ID_HEADERS else HEADERS.get(normalized)
 
 
 def field_error(email, username, account_id):
@@ -56,10 +67,13 @@ def parse_csv(raw: bytes):
     try:
         reader = csv.reader(io.StringIO(text, newline=""), strict=True)
         header = next(reader)
-        columns = [HEADERS.get(value.strip().lower()) for value in header]
+        columns = [resolve_header(value) for value in header]
+        if columns.count("account_id") > 1:
+            raise AuthError("表头须包含“用户名、邮箱、ID”三列：检测到多个 ID 列，请仅保留一个平台用户 ID 列。")
         if (None in columns or len(columns) != 3
                 or set(columns) != {"email", "username", "account_id"}):
-            raise AuthError("表头须包含“用户名、邮箱、ID”三列（支持 username、email、id，顺序不限）。"
+            raise AuthError("表头须包含“用户名、邮箱、ID”三列，顺序不限。支持 username、email，"
+                            "以及 id、用户id、user_id、平台ID 等写法，忽略大小写、空格、下划线和连字符。"
                             "ID 为 Samlab 平台用户 ID。白名单永久有效，不接受有效期、密码或学号列。")
         rows = []
         for values in reader:

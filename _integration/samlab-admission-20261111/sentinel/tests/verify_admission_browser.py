@@ -69,7 +69,7 @@ def verify_roster_id_backfill(page, admission, origin):
     dialog = page.get_by_role("dialog", name="导入实验室名单", exact=True)
     dialog.get_by_label("名单文件", exact=True).set_input_files({
         "name": "legacy-backfill.csv", "mimeType": "text/csv",
-        "buffer": f"用户名,邮箱,ID\n旧名单人员,{email},802\n".encode("utf-8-sig"),
+        "buffer": f"USER ID,邮箱,用户名\n802,{email},旧名单人员\n".encode("utf-8-sig"),
     })
     expect(dialog.get_by_role("cell").get_by_text("补录 ID", exact=True)).to_be_visible()
     expect(dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
@@ -411,7 +411,7 @@ def main():
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_disabled()
                     import_dialog.get_by_label("名单文件", exact=True).set_input_files({
                         "name": "lab-roster.csv", "mimeType": "text/csv",
-                        "buffer": "用户名,邮箱,ID\n导入人员,roster-browser@example.edu,801\n导入人员,roster-browser@example.edu,801\n".encode("utf-8-sig"),
+                        "buffer": "邮箱,用户id,用户名\nroster-browser@example.edu,801,导入人员\nroster-browser@example.edu,801,导入人员\n".encode("utf-8-sig"),
                     })
                     expect(import_dialog.get_by_role("button", name="确认导入", exact=True)).to_be_enabled()
                     page.screenshot(path=str(OUTPUT / "roster-import-desktop.png"), full_page=True)
