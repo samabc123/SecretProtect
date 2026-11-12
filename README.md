@@ -112,8 +112,8 @@ the form creates a short-lived administrator-owned preview; confirmation uses
 the same transactional, idempotent conflict and restoration checks as CSV.
 New manual records have a distinct `manual` source and audit trail, and do not
 create security administrators or claim a remote account has been provisioned.
-The source filter no longer offers administrator invitations; historical
-invitation records and the signed platform compatibility contract are retained.
+The source filter no longer offers direct administrator creation or invitations;
+historical records and the signed platform compatibility contract are retained.
 
 Administrators can select the displayed rows and delete up to 500 members in
 one atomic operation. Single and batch deletion share the same logic, require

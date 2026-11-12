@@ -213,8 +213,8 @@ const emptyRequests = computed(() => query.value.trim() || source.value || reque
 const emptyMembers = computed(() => query.value.trim() || source.value ? "没有匹配的白名单人员" : "暂无已批准的 Samlab 人员");
 const emptyAudits = computed(() => query.value.trim() ? "没有匹配的审批审计" : "暂无审批审计");
 const decisionLabels = { pending: "待审批", approved: "已同意", rejected: "不同意" };
-const sourceOptions = { self: "用户申请", admin_direct: "管理员直接创建", manual: "管理员手动添加", roster: "文件导入" };
-const sourceLabels = { ...sourceOptions, admin_invite: "历史邀请记录" };
+const sourceOptions = { self: "用户申请", manual: "管理员手动添加", roster: "文件导入" };
+const sourceLabels = { ...sourceOptions, admin_direct: "管理员直接创建", admin_invite: "历史邀请记录" };
 const auditLabels = { "whitelist.imported": "导入名单人员", "whitelist.id_imported": "补录平台 ID", "whitelist.manual_added": "管理员手动添加人员", "member.manual.committed": "确认手动添加批次", "whitelist.restored": "恢复白名单", "roster.import.committed": "确认名单导入批次", "application.received": "收到注册申请", "application.approved": "同意申请", "application.rejected": "不同意申请", "whitelist.approved": "批准加入白名单", "whitelist.admin_provisioned": "管理员直接授权白名单", "account.admin_created": "记录管理员创建账号", "whitelist.revoked": "历史撤销准入", "whitelist.deleted": "删除白名单人员", "whitelist.batch_deleted": "批量删除白名单人员", "whitelist.permanent_enabled": "转为永久白名单", "whitelist.legacy_deleted": "合并历史停用状态", "platform.active.acknowledged": "平台回执开通", "platform.disabled.acknowledged": "平台回执停用" };
 const date = value => value ? new Date(value * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
 const decisionType = value => ({ pending: "warning", approved: "success", rejected: "danger" })[value];
