@@ -1,10 +1,15 @@
-# Publish only the active integration source, never the old release or backups.
+# Publish SecertProtect only. Private archives and legacy checkouts stay local.
 /*
 !/.gitignore
+!/.gitmodules
 !/README.md
-!/_integration/
-/_integration/*
-!/_integration/samlab-admission-20261111/
+!/LICENSE
+!/THIRD_PARTY_NOTICES.md
+!/platform/
+!/engine/
+!/deploy/
+!/scripts/
+!/docs/
 
 **/node_modules/
 **/.venv/
@@ -32,3 +37,11 @@
 **/dist/
 **/.cache/
 **/coverage/
+**/*.bundle
+**/*.credentials
+**/*.secret
+**/*credentials*.yaml
+**/machine.yaml
+**/secrets/
+**/runtime/
+**/playwright-report/

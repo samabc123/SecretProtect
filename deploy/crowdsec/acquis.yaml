@@ -1,0 +1,5 @@
+filenames:
+  - /var/log/samlab/access.log
+  - /var/log/samlab/error.log
+labels:
+  type: nginx

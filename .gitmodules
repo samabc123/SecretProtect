@@ -1,0 +1,3 @@
+[submodule "engine/crowdsec"]
+	path = engine/crowdsec
+	url = https://github.com/crowdsecurity/crowdsec.git

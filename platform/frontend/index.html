@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="__CSRF_TOKEN__" />
+    <meta name="application-name" content="SecertProtect" />
+    <title>SecertProtect · 实验室安全管理</title>
+    <link rel="icon" type="image/png" href="/static/vue/branding/secret-radar-logo-16.png">
+  </head>
+  <body>
+    <div id="app" data-logout="vue-session-control"></div>
+    <!-- Compatibility markers for the existing authenticated-page contract. -->
+    <div id="legacy-contract-markers" hidden>
+      <span data-settings-panel="account"></span>
+      <span data-settings-panel="general"></span>
+      <span data-settings-panel="connections"></span>
+      <span data-settings-panel="sources"></span>
+      <span data-settings-panel="budget"></span>
+      <span data-settings-panel="verification"></span>
+      <span data-settings-panel="audit"></span>
+    </div>
+    <script>
+      window.__APP_MODE_VALUE__ = "__APP_MODE__";
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

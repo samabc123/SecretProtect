@@ -1,0 +1,32 @@
+name: secertprotect
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.8.2
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      DISABLE_ONLINE_API: "true"
+      COLLECTIONS: crowdsecurity/nginx
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - crowdsec_config:/etc/crowdsec
+      - crowdsec_data:/var/lib/crowdsec/data
+      - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - ./crowdsec/simulation.yaml:/etc/crowdsec/simulation.yaml:ro
+      - ${SAMLAB_NGINX_LOG_DIR:?Set an explicitly authorized Nginx log directory}:/var/log/samlab:ro
+    healthcheck:
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  crowdsec_config:
+  crowdsec_data:

@@ -1,0 +1,23 @@
+[Unit]
+Description=SecertProtect management service
+After=network.target
+
+[Service]
+User=secertprotect
+Group=secertprotect
+WorkingDirectory=/opt/secertprotect/platform
+EnvironmentFile=/etc/secertprotect/runtime.env
+Environment=PYTHONUTF8=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/secertprotect/platform/.venv/bin/python /opt/secertprotect/scripts/service.py web
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/secertprotect/platform/data
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
