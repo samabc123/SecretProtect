@@ -29,8 +29,11 @@ request.interceptors.response.use(
   (error) => {
     loadingInstance?.close();
     if (error.response?.status === 401) {
-      const next = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+      // The login form owns invalid-credential errors; reloading would erase them.
+      if (window.location.pathname !== "/login") {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+      }
     } else if (error.response?.data?.detail) {
       ElMessage.error(error.response.data.detail);
     } else if (!error.config?.silent) {
